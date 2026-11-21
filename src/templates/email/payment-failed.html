@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Failed</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #6366f1;
+        }
+        .content {
+            margin-bottom: 30px;
+        }
+        .button {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: #6366f1;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        .error {
+            background-color: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 10px;
+            margin: 20px 0;
+        }
+        .footer {
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">{{platformName}}</div>
+        </div>
+        <div class="content">
+            <h1>Payment Failed</h1>
+            <p>Hi {{userName}},</p>
+            <div class="error">
+                <p><strong>Your payment could not be processed.</strong></p>
+            </div>
+            <p>We're sorry, but we were unable to process your payment for order {{orderId}}. This could be due to:</p>
+            <ul>
+                <li>Insufficient funds</li>
+                <li>Card declined by bank</li>
+                <li>Expired card</li>
+                <li>Technical issue with payment processor</li>
+            </ul>
+            <p>Please try again or use a different payment method.</p>
+            <a href="{{orderUrl}}" class="button">Retry Payment</a>
+        </div>
+        <div class="footer">
+            <p>If you continue to experience issues, please contact us at {{supportEmail}}</p>
+            <p>&copy; {{year}} {{platformName}}. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

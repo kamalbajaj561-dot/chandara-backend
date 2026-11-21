@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Creator Application Update</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #6366f1;
+        }
+        .content {
+            margin-bottom: 30px;
+        }
+        .button {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: #6366f1;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 10px;
+            margin: 20px 0;
+        }
+        .footer {
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">{{platformName}}</div>
+        </div>
+        <div class="content">
+            <h1>Update on Your Creator Application</h1>
+            <p>Hi {{creatorName}},</p>
+            <div class="info">
+                <p><strong>Your creator application requires additional review.</strong></p>
+            </div>
+            <p>Thank you for your interest in becoming a creator on {{platformName}}. After reviewing your application, we need some additional information or clarification before we can proceed.</p>
+            <p>Please review the feedback provided and submit any requested information through your dashboard.</p>
+            <a href="{{creatorDashboardUrl}}" class="button">View Application Status</a>
+            <p>If you have any questions about this decision, please don't hesitate to reach out to our support team.</p>
+        </div>
+        <div class="footer">
+            <p>Contact us at {{supportEmail}}</p>
+            <p>&copy; {{year}} {{platformName}}. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

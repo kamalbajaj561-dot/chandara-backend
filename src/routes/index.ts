@@ -1,0 +1,46 @@
+import { Router } from 'express';
+import authRoutes from './auth.routes';
+import userRoutes from './user.routes';
+import creatorRoutes from './creator.routes';
+import followRoutes from './follow.routes';
+import eventRoutes from './event.routes';
+import streamRoutes from './stream.routes';
+import ticketRoutes from './ticket.routes';
+import orderRoutes from './order.routes';
+import paymentRoutes from './payment.routes';
+import couponRoutes from './coupon.routes';
+import refundRoutes from './refund.routes';
+import notificationRoutes from './notification.routes';
+import chatRoutes from './chat.routes';
+import livekitRoutes from './livekit.routes';
+import adminRoutes from './admin.routes';
+import emailRoutes from './email.routes';
+import ticketDeliveryRoutes from './ticketDelivery.routes';
+import pushRoutes from './push.routes';
+import analyticsRoutes from './analytics.routes';
+import healthRoutes from './health.routes';
+
+const router = Router();
+
+router.use('/auth', authRoutes);
+router.use('/users', userRoutes);
+router.use('/creators', creatorRoutes);
+router.use('/follow', followRoutes);
+router.use('/events', eventRoutes);
+router.use('/streams', streamRoutes);
+router.use('/tickets', ticketRoutes);
+router.use('/orders', orderRoutes);
+router.use('/payments', paymentRoutes);
+router.use('/coupons', couponRoutes);
+router.use('/refunds', refundRoutes);
+router.use('/notifications', notificationRoutes);
+router.use('/chat', chatRoutes);
+router.use('/livekit', livekitRoutes);
+router.use('/admin', adminRoutes);
+router.use('/email', emailRoutes);
+router.use('/delivery', ticketDeliveryRoutes);
+router.use('/push', pushRoutes);
+router.use('/analytics', analyticsRoutes);
+router.use('/', healthRoutes);
+
+export default router;

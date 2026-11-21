@@ -1,0 +1,129 @@
+version: '3.8'
+
+services:
+  chandara-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chandara-backend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+      - FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY}
+      - FIREBASE_CLIENT_EMAIL=${FIREBASE_CLIENT_EMAIL}
+      - FIREBASE_DATABASE_URL=${FIREBASE_DATABASE_URL}
+      - FIREBASE_SERVICE_ACCOUNT_KEY_PATH=/app/chandara-vr-firebase-adminsdk-fbsvc-5824ae300f.json
+      - LIVEKIT_URL=${LIVEKIT_URL:-ws://localhost:7880}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-devkey}
+      - LIVEKIT_API_SECRET=devsecret1234567890abcdef1234567890abcdef
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_DB=0
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-7d}
+      - JWT_REFRESH_EXPIRES_IN=${JWT_REFRESH_EXPIRES_IN:-30d}
+      - CORS_ORIGIN=${CORS_ORIGIN}
+      - RATE_LIMIT_WINDOW_MS=${RATE_LIMIT_WINDOW_MS:-900000}
+      - RATE_LIMIT_MAX_REQUESTS=${RATE_LIMIT_MAX_REQUESTS:-100}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_FILE_PATH=logs
+      - SOCKET_CORS_ORIGIN=${SOCKET_CORS_ORIGIN}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - chandara-network
+    restart: unless-stopped
+    volumes:
+      - ./logs:/app/logs:ro
+      - ./chandara-vr-firebase-adminsdk-fbsvc-5824ae300f.json:/app/chandara-vr-firebase-adminsdk-fbsvc-5824ae300f.json:ro
+    # Resource limits for security
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    # Security hardening
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: chandara-redis
+    ports:
+      - "127.0.0.1:6379:6379"  # Bind to localhost only
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-default_change_me}
+    volumes:
+      - redis-data:/data
+    networks:
+      - chandara-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-default_change_me}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    # Resource limits for security
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    # Security hardening
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: chandara-livekit
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+      - "64000-65000:64000-65000/udp"
+    environment:
+      LIVEKIT_KEYS: "devkey: devsecret1234567890abcdef1234567890abcdef"
+      LIVEKIT_REDIS_ADDRESS: redis:6379
+      LIVEKIT_REDIS_PASSWORD: ${REDIS_PASSWORD:-default_change_me}
+      LIVEKIT_NODE_IP: host.docker.internal
+      LIVEKIT_RTC_PORT_RANGE_START: 64000
+      LIVEKIT_RTC_PORT_RANGE_END: 65000
+    networks:
+      - chandara-network
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    # Resource limits for security
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+volumes:
+  redis-data:
+    driver: local
+
+networks:
+  chandara-network:
+    driver: bridge

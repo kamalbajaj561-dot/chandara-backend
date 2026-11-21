@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LiveKit Publisher Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.5.0/dist/livekit-client.umd.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .controls {
+            flex: 1;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 8px;
+        }
+        .video-container {
+            flex: 2;
+        }
+        video {
+            width: 100%;
+            border-radius: 8px;
+            background: #000;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        button {
+            margin: 5px;
+            padding: 10px 20px;
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        input {
+            width: 100%;
+            margin: 5px 0;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>LiveKit Publisher Test</h1>
+    
+    <div class="container">
+        <div class="controls">
+            <h2>Connection Settings</h2>
+            <label>LiveKit URL:</label>
+            <input type="text" id="livekitUrl" value="ws://localhost:7880" placeholder="ws://localhost:7880">
+            
+            <label>Room Name:</label>
+            <input type="text" id="roomName" value="chandara-event-Ts4rhfl8tScquP64mLgI-f59bb957a8e5c3b43e50e31083d88f51">
+            
+            <label>Participant Name:</label>
+            <input type="text" id="participantName" value="CxRVN1seaYX0mJxKR7TR6m1KUC53">
+            
+            <label>Token:</label>
+            <input type="text" id="token" placeholder="Enter your LiveKit token">
+            
+            <button id="connectBtn">Connect & Publish</button>
+            <button id="disconnectBtn" disabled>Disconnect</button>
+            
+            <div id="status" class="status disconnected">Status: Disconnected</div>
+            
+            <div id="logs" style="margin-top: 20px; max-height: 300px; overflow-y: auto; background: #fff; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px;"></div>
+        </div>
+        
+        <div class="video-container">
+            <h2>Local Video</h2>
+            <video id="localVideo" autoplay muted playsinline></video>
+        </div>
+    </div>
+
+    <script>
+        let room = null;
+        let localVideoTrack = null;
+        let localAudioTrack = null;
+
+        function log(message) {
+            const logs = document.getElementById('logs');
+            const time = new Date().toLocaleTimeString();
+            logs.innerHTML += `<div>[${time}] ${message}</div>`;
+            logs.scrollTop = logs.scrollHeight;
+            console.log(message);
+        }
+
+        async function connect() {
+            const livekitUrl = document.getElementById('livekitUrl').value;
+            const roomName = document.getElementById('roomName').value;
+            const participantName = document.getElementById('participantName').value;
+            const token = document.getElementById('token').value;
+
+            if (!token) {
+                alert('Please enter a LiveKit token');
+                return;
+            }
+
+            try {
+                log('Connecting to LiveKit...');
+                
+                room = new LivekitClient.Room({
+                    adaptiveStream: true,
+                    dynacast: true,
+                });
+
+                room.on('connected', () => {
+                    log('Connected to room');
+                    updateStatus(true);
+                });
+
+                room.on('disconnected', () => {
+                    log('Disconnected from room');
+                    updateStatus(false);
+                });
+
+                room.on('participantConnected', (participant) => {
+                    log(`Participant connected: ${participant.identity}`);
+                });
+
+                room.on('trackSubscribed', (track, publication, participant) => {
+                    log(`Track subscribed: ${track.kind} from ${participant.identity}`);
+                });
+
+                await room.connect(livekitUrl, token);
+                log('Room connected successfully');
+
+                // Get user media
+                log('Getting user media...');
+                const mediaStream = await navigator.mediaDevices.getUserMedia({
+                    video: true,
+                    audio: true,
+                });
+
+                // Publish video track
+                log('Publishing video track...');
+                const videoTrack = room.localParticipant.publishTrack(
+                    mediaStream.getVideoTracks()[0],
+                    { name: 'camera', simulcast: true }
+                );
+                log('Video track published');
+
+                // Publish audio track
+                log('Publishing audio track...');
+                const audioTrack = room.localParticipant.publishTrack(
+                    mediaStream.getAudioTracks()[0],
+                    { name: 'microphone' }
+                );
+                log('Audio track published');
+
+                // Display local video
+                const videoElement = document.getElementById('localVideo');
+                videoElement.srcObject = mediaStream;
+                log('Local video displayed');
+
+                document.getElementById('connectBtn').disabled = true;
+                document.getElementById('disconnectBtn').disabled = false;
+
+                log('=== PUBLISHER CONNECTED AND PUBLISHING ===');
+                log(`Room: ${roomName}`);
+                log(`Participant: ${participantName}`);
+                log('Video: Publishing');
+                log('Audio: Publishing');
+
+            } catch (error) {
+                log(`Error: ${error.message}`);
+                console.error(error);
+                updateStatus(false);
+            }
+        }
+
+        function disconnect() {
+            if (room) {
+                log('Disconnecting...');
+                room.disconnect();
+                room = null;
+                document.getElementById('localVideo').srcObject = null;
+                document.getElementById('connectBtn').disabled = false;
+                document.getElementById('disconnectBtn').disabled = true;
+                log('Disconnected');
+            }
+        }
+
+        function updateStatus(connected) {
+            const status = document.getElementById('status');
+            if (connected) {
+                status.className = 'status connected';
+                status.textContent = 'Status: Connected & Publishing';
+            } else {
+                status.className = 'status disconnected';
+                status.textContent = 'Status: Disconnected';
+            }
+        }
+
+        // Add event listeners
+        document.getElementById('connectBtn').addEventListener('click', connect);
+        document.getElementById('disconnectBtn').addEventListener('click', disconnect);
+    </script>
+</body>
+</html>
