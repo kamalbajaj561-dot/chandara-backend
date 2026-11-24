@@ -21,6 +21,18 @@ declare global {
   }
 }
 
+// The frontend/Firestore store 'user' | 'streamer' | 'admin'; backend route guards use
+// 'viewer' | 'creator' | 'administrator'. Normalize so both vocabularies work.
+const ROLE_ALIASES: Record<string, string> = {
+  user: 'viewer',
+  streamer: 'creator',
+  admin: 'administrator',
+};
+export const normalizeRole = (role: unknown): string => {
+  const r = typeof role === 'string' ? role : 'viewer';
+  return ROLE_ALIASES[r] || r;
+};
+
 export const authMiddleware = async (
   req: Request,
   _res: Response,
@@ -72,7 +84,7 @@ export const authMiddleware = async (
     req.user = {
       userId: decodedToken.uid,
       email: decodedToken.email || '',
-      role: userData?.role || 'viewer',
+      role: normalizeRole(userData?.role),
       type: 'access',
       iat: decodedToken.iat || 0,
       exp: decodedToken.exp || 0,
@@ -135,7 +147,7 @@ export const optionalAuth = async (
           req.user = {
             userId: decodedToken.uid,
             email: decodedToken.email || '',
-            role: userData?.role || 'viewer',
+            role: normalizeRole(userData?.role),
             type: 'access',
             iat: decodedToken.iat || 0,
             exp: decodedToken.exp || 0,

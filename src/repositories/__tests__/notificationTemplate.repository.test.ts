@@ -40,7 +40,7 @@ describe('NotificationTemplateRepository', () => {
         fromMillis: jest.fn((_ms) => mockTimestamp),
       },
     };
-    (repository as any).db = mockDb;
+    Object.defineProperty(repository, 'db', { get: () => mockDb, configurable: true });
   });
 
   describe('create', () => {

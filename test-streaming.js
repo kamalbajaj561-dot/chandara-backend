@@ -7,9 +7,13 @@
 const { RoomServiceClient, AccessToken } = require('livekit-server-sdk');
 
 // Configuration
-const LIVEKIT_URL = 'http://localhost:7880';
-const LIVEKIT_API_KEY = 'devkey';
-const LIVEKIT_API_SECRET = 'devsecret1234567890abcdef1234567890abcdef';
+const LIVEKIT_URL = process.env.LIVEKIT_HTTP_URL || 'http://localhost:7880';
+const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
+const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
+if (!LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
+  console.error('Set LIVEKIT_API_KEY and LIVEKIT_API_SECRET (same values as your .env) before running.');
+  process.exit(1);
+}
 const TEST_ROOM = 'e2e-test-room-' + Date.now();
 const PUBLISHER_NAME = 'test-publisher';
 const VIEWER_NAME = 'test-viewer';

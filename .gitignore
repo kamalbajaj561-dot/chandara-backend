@@ -1,6 +1,5 @@
 # Dependencies
 node_modules/
-package-lock.json
 yarn.lock
 
 # Build output
@@ -46,3 +45,10 @@ firebase-*.json
 # Firebase service account keys (explicit)
 *-firebase-adminsdk-*.json
 *-service-account*.json
+
+# Secrets - never commit
+*-firebase-adminsdk-*.json
+firebase-service-account.json
+serviceAccount*.json
+*.pem
+*.key

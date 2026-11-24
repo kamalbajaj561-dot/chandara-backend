@@ -15,10 +15,10 @@ services:
       - FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY}
       - FIREBASE_CLIENT_EMAIL=${FIREBASE_CLIENT_EMAIL}
       - FIREBASE_DATABASE_URL=${FIREBASE_DATABASE_URL}
-      - FIREBASE_SERVICE_ACCOUNT_KEY_PATH=/app/chandara-vr-firebase-adminsdk-fbsvc-5824ae300f.json
+      - FIREBASE_SERVICE_ACCOUNT_KEY_PATH=/app/firebase-service-account.json
       - LIVEKIT_URL=${LIVEKIT_URL:-ws://localhost:7880}
-      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-devkey}
-      - LIVEKIT_API_SECRET=devsecret1234567890abcdef1234567890abcdef
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY in .env}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET in .env}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
@@ -40,7 +40,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./logs:/app/logs:ro
-      - ./chandara-vr-firebase-adminsdk-fbsvc-5824ae300f.json:/app/chandara-vr-firebase-adminsdk-fbsvc-5824ae300f.json:ro
+      - ${FIREBASE_SERVICE_ACCOUNT_FILE:-./firebase-service-account.json}:/app/firebase-service-account.json:ro
     # Resource limits for security
     deploy:
       resources:
@@ -62,14 +62,14 @@ services:
     container_name: chandara-redis
     ports:
       - "127.0.0.1:6379:6379"  # Bind to localhost only
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-default_change_me}
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
     volumes:
       - redis-data:/data
     networks:
       - chandara-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-default_change_me}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -98,9 +98,9 @@ services:
       - "7882:7882/udp"
       - "64000-65000:64000-65000/udp"
     environment:
-      LIVEKIT_KEYS: "devkey: devsecret1234567890abcdef1234567890abcdef"
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY in .env}: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET in .env}"
       LIVEKIT_REDIS_ADDRESS: redis:6379
-      LIVEKIT_REDIS_PASSWORD: ${REDIS_PASSWORD:-default_change_me}
+      LIVEKIT_REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
       LIVEKIT_NODE_IP: host.docker.internal
       LIVEKIT_RTC_PORT_RANGE_START: 64000
       LIVEKIT_RTC_PORT_RANGE_END: 65000

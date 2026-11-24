@@ -18,6 +18,7 @@ export async function generateLiveKitToken(
 
     const token = new AccessToken(config.livekit.apiKey, config.livekit.apiSecret, {
       identity: request.participantName,
+      name: request.displayName,
       ttl,
     });
 

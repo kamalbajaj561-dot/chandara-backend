@@ -426,6 +426,7 @@ export interface AuditLog {
 export interface LiveKitTokenRequest {
   roomName: string;
   participantName: string;
+  displayName?: string;
   role: 'publisher' | 'subscriber' | 'moderator';
 }
 

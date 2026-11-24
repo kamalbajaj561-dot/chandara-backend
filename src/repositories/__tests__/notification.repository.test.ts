@@ -36,7 +36,7 @@ describe('NotificationRepository', () => {
         commit: jest.fn(),
       }),
     };
-    (repository as any).db = mockDb;
+    Object.defineProperty(repository, 'db', { get: () => mockDb, configurable: true });
   });
 
   describe('create', () => {

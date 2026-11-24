@@ -16,7 +16,7 @@ describe('NotificationPreferenceRepository', () => {
     mockDb = {
       collection: jest.fn().mockReturnValue(mockCollection),
     };
-    (repository as any).db = mockDb;
+    Object.defineProperty(repository, 'db', { get: () => mockDb, configurable: true });
   });
 
   describe('create', () => {

@@ -374,15 +374,13 @@ export class AuthService {
       jti,
     };
 
-    // @ts-ignore - JWT types are incompatible with current version
     const accessToken = jwt.sign(accessTokenPayload, config.jwt.secret as string, {
       expiresIn: config.jwt.expiresIn,
-    });
+    } as jwt.SignOptions);
 
-    // @ts-ignore - JWT types are incompatible with current version
     const refreshToken = jwt.sign(refreshTokenPayload, config.jwt.secret as string, {
       expiresIn: config.jwt.refreshExpiresIn,
-    });
+    } as jwt.SignOptions);
 
     return { accessToken, refreshToken };
   }

@@ -1,4 +1,10 @@
-import { generateLiveKitToken } from '../livekit';
+// Test-only throwaway credentials (not real); the global jest setup mocks '../livekit', so load the real module.
+process.env.LIVEKIT_API_KEY = 'test-key';
+process.env.LIVEKIT_API_SECRET = 'test-secret-test-secret-test-secret-123456';
+let generateLiveKitToken: any;
+jest.isolateModules(() => {
+  generateLiveKitToken = jest.requireActual('../livekit').generateLiveKitToken;
+});
 import { LiveKitTokenRequest } from '../../types';
 
 describe('LiveKit Service', () => {

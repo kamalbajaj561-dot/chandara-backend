@@ -3,6 +3,7 @@ import { generateLiveKitToken } from '../services/livekit';
 import { LiveKitTokenRequest, ApiResponse } from '../types';
 import { AppError } from '../middleware/errorHandler';
 import { authMiddleware } from '../middleware/auth';
+import { authorizeLiveKitAccess } from '../services/livekitAccess';
 
 const router = Router();
 
@@ -19,7 +20,17 @@ router.post('/token', authMiddleware, async (req: any, res: any, next: any) => {
       throw new AppError('Invalid role. Must be publisher, subscriber, or moderator', 400);
     }
 
-    const response = await generateLiveKitToken(request);
+    // Authorize on the server: never trust the client-supplied role.
+    await authorizeLiveKitAccess(req.user, request.roomName, request.role);
+
+    // Identity is always the verified user id; the client-supplied name is display-only.
+    const displayName = String(request.participantName).replace(/[^\w .@-]/g, '').slice(0, 64) || 'guest';
+    const response = await generateLiveKitToken({
+      roomName: request.roomName,
+      participantName: req.user.userId,
+      displayName,
+      role: request.role,
+    } as LiveKitTokenRequest);
 
     const apiResponse: ApiResponse<any> = {
       success: true,
