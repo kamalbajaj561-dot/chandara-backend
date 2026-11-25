@@ -2,6 +2,11 @@ import { Request, Response, NextFunction } from 'express';
 import { PaymentController } from '../payment.controller';
 
 jest.mock('../../services/payment.service');
+jest.mock('../../services/paymentFlow.service', () => ({
+  createPaymentForOrder: jest.fn(),
+  verifyAndFulfill: jest.fn(),
+}));
+import { createPaymentForOrder, verifyAndFulfill } from '../../services/paymentFlow.service';
 
 describe('PaymentController', () => {
   let mockRequest: Partial<Request>;
@@ -23,24 +28,22 @@ describe('PaymentController', () => {
   });
 
   describe('createPayment', () => {
-    it('should create a new payment', async () => {
-      mockRequest.body = {
-        orderId: 'order1',
-        amount: 100,
-        currency: 'USD',
-        provider: 'razorpay',
-      };
-
-      const { paymentService } = require('../../services/payment.service');
-      paymentService.createPayment = jest.fn().mockResolvedValue({
-        success: true,
-        providerPaymentId: 'razorpay123',
-      });
+    it('creates a payment for the order using only the order id from the request', async () => {
+      mockRequest.body = { orderId: 'order1', amount: 0.01, currency: 'USD', provider: 'mock' }; // money fields ignored
+      (createPaymentForOrder as jest.Mock).mockResolvedValue({ orderId: 'order1', providerPaymentId: 'pp1' });
 
       await PaymentController.createPayment(mockRequest as Request, mockResponse as Response, mockNext);
 
+      expect(createPaymentForOrder).toHaveBeenCalledWith({ userId: 'user1', role: 'viewer' }, 'order1');
       expect(mockResponse.status).toHaveBeenCalledWith(201);
-      expect(mockResponse.json).toHaveBeenCalled();
+    });
+
+    it('forwards flow errors (e.g. not your order) to the error handler', async () => {
+      mockRequest.body = { orderId: 'order1' };
+      const err = new Error('Order not found');
+      (createPaymentForOrder as jest.Mock).mockRejectedValue(err);
+      await PaymentController.createPayment(mockRequest as Request, mockResponse as Response, mockNext);
+      expect(mockNext).toHaveBeenCalledWith(err);
     });
   });
 
@@ -63,21 +66,14 @@ describe('PaymentController', () => {
   });
 
   describe('verifyPayment', () => {
-    it('should verify a payment', async () => {
-      mockRequest.params = { paymentId: 'payment1' };
-      mockRequest.body = { provider: 'razorpay' };
-
-      const { paymentService } = require('../../services/payment.service');
-      paymentService.verifyPayment = jest.fn().mockResolvedValue({
-        success: true,
-        status: 'paid',
-        amount: 100,
-      });
+    it('verifies on behalf of the authenticated user and reports ticket issuance', async () => {
+      mockRequest.body = { providerPaymentId: 'pp1', provider: 'razorpay' };
+      (verifyAndFulfill as jest.Mock).mockResolvedValue({ success: true, status: 'paid', amount: 100, orderId: 'o1', ticketsIssued: true });
 
       await PaymentController.verifyPayment(mockRequest as Request, mockResponse as Response, mockNext);
 
+      expect(verifyAndFulfill).toHaveBeenCalledWith({ userId: 'user1', role: 'viewer' }, 'pp1', 'razorpay');
       expect(mockResponse.status).toHaveBeenCalledWith(200);
-      expect(mockResponse.json).toHaveBeenCalled();
     });
   });
 

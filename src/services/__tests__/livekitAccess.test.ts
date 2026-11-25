@@ -63,6 +63,18 @@ describe('authorizeLiveKitAccess', () => {
 });
 
 import { normalizeRole } from '../../middleware/auth';
+describe('client-written events (ownerId, pending status)', () => {
+  const clientEvent: any = { id: 'ev9', ownerId: 'owner9', status: 'live', ticketPrice: 0 };
+  it('recognises ownerId as the creator', async () => {
+    await expect(authorizeLiveKitAccess({ userId: 'owner9', role: 'viewer' }, 'ev9', 'publisher', makeDeps(clientEvent))).resolves.toBeUndefined();
+    await expectStatus(authorizeLiveKitAccess({ userId: 'other', role: 'viewer' }, 'ev9', 'publisher', makeDeps(clientEvent)), 403);
+  });
+  it('hides pending and rejected events from viewers', async () => {
+    await expectStatus(authorizeLiveKitAccess({ userId: 'u', role: 'viewer' }, 'ev9', 'subscriber', makeDeps({ ...clientEvent, status: 'pending' })), 403);
+    await expectStatus(authorizeLiveKitAccess({ userId: 'u', role: 'viewer' }, 'ev9', 'subscriber', makeDeps({ ...clientEvent, status: 'rejected' })), 403);
+  });
+});
+
 describe('normalizeRole', () => {
   it('maps frontend roles to backend roles', () => {
     expect(normalizeRole('admin')).toBe('administrator');

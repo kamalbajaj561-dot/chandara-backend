@@ -2,6 +2,11 @@ import { TicketingOrder, OrderStatus, PaymentProvider, Currency } from '../types
 import { orderRepository } from '../repositories/order.repository';
 import { couponRepository } from '../repositories/coupon.repository';
 import { paymentService } from './payment.service';
+import { eventService } from './event.service';
+import { getEventOwnerId, NON_BOOKABLE_EVENT_STATUSES } from '../utils/eventOwner';
+import config from '../config';
+
+const MAX_TICKETS_PER_ORDER = 10;
 
 interface OrderItem {
   ticketType: string;
@@ -10,6 +15,9 @@ interface OrderItem {
 }
 
 export class OrderService {
+  /** Overridable for tests. */
+  eventLookup: (id: string) => Promise<any> = (id) => eventService.getEvent(id);
+
   async createOrder(
     userId: string,
     creatorId: string,
@@ -20,10 +28,44 @@ export class OrderService {
     couponCode?: string
   ): Promise<{ success: boolean; order?: TicketingOrder; error?: string }> {
     try {
-      let subtotal = 0;
-      for (const item of items) {
-        subtotal += item.price * item.quantity;
+      // Never trust client pricing: the unit price always comes from the event record.
+      if (config.nodeEnv === 'production' && paymentProvider === 'mock') {
+        return { success: false, error: 'Mock payments are disabled in production' };
       }
+
+      let event: any;
+      try {
+        event = await this.eventLookup(eventId);
+      } catch {
+        return { success: false, error: 'Event not found' };
+      }
+      if (NON_BOOKABLE_EVENT_STATUSES.includes(event.status)) {
+        return { success: false, error: 'Tickets are not available for this event' };
+      }
+      const unitPrice = Number(event.ticketPrice);
+      if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+        return { success: false, error: 'This event does not require a ticket purchase' };
+      }
+
+      const requested = Array.isArray(items) ? items : [];
+      let quantity = 0;
+      for (const item of requested) {
+        if (item.ticketType !== 'general' && item.ticketType !== 'regular') {
+          return { success: false, error: 'Only general admission tickets are available for this event' };
+        }
+        if (!Number.isInteger(item.quantity) || item.quantity < 1) {
+          return { success: false, error: 'Invalid ticket quantity' };
+        }
+        quantity += item.quantity;
+      }
+      if (quantity < 1 || quantity > MAX_TICKETS_PER_ORDER) {
+        return { success: false, error: `You can buy between 1 and ${MAX_TICKETS_PER_ORDER} tickets per order` };
+      }
+
+      const trustedItems = [{ ticketType: 'regular' as const, price: unitPrice, quantity }];
+      creatorId = getEventOwnerId(event) || creatorId;
+      currency = (event.currency as Currency) || currency;
+      const subtotal = unitPrice * quantity;
 
       let discount = 0;
       let couponId: string | undefined;
@@ -51,6 +93,7 @@ export class OrderService {
         creatorId,
         eventId,
         ticketIds: [],
+        items: trustedItems,
         subtotal,
         discount,
         tax,

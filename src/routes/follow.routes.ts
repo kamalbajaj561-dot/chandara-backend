@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { FollowController } from '../controllers/follow.controller';
 import { authMiddleware } from '../middleware/auth';
 import { validateListFollows } from '../validators/follow.validators';
+import { fromQuery } from '../middleware/validate';
 
 const router = Router();
 
@@ -15,10 +16,10 @@ router.delete('/users/:userId', authMiddleware, FollowController.unfollowUser);
 router.get('/users/:userId/check', authMiddleware, FollowController.checkIsFollowing);
 
 // Get user's followers (public)
-router.get('/users/:userId/followers', validateListFollows, FollowController.getFollowers);
+router.get('/users/:userId/followers', fromQuery(validateListFollows), FollowController.getFollowers);
 
 // Get user's following (public)
-router.get('/users/:userId/following', validateListFollows, FollowController.getFollowing);
+router.get('/users/:userId/following', fromQuery(validateListFollows), FollowController.getFollowing);
 
 // Get user's followers count (public)
 router.get('/users/:userId/followers/count', FollowController.getFollowersCount);

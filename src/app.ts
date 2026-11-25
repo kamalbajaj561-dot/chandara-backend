@@ -61,7 +61,13 @@ app.use(
 app.use(compression());
 
 // Body parsing
-app.use(express.json({ limit: '10mb' }));
+// Keep the raw bytes: payment-provider webhook signatures are computed over the exact request body.
+app.use(express.json({
+  limit: '10mb',
+  verify: (req: any, _res, buf) => {
+    req.rawBody = buf;
+  },
+}));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Request logging

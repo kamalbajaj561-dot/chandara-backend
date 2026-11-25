@@ -1,39 +1,21 @@
 import { Request, Response, NextFunction } from 'express';
 import { paymentService } from '../services/payment.service';
+import { createPaymentForOrder, verifyAndFulfill } from '../services/paymentFlow.service';
+import { handlePaymentWebhook } from '../services/paymentWebhook.service';
+import { AppError } from '../middleware/errorHandler';
 import { ApiResponse } from '../types';
 
 export class PaymentController {
   static async createPayment(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = req.user?.userId;
-      const { orderId, amount, currency, provider, description, metadata } = req.body;
-
-      if (!userId) {
-        const response: ApiResponse = {
-          success: false,
-          error: 'User not authenticated',
-        };
-        res.status(401).json(response);
-        return;
-      }
-
-      const result = await paymentService.createPayment(
-        orderId,
-        userId,
-        amount,
-        currency,
-        provider,
-        description,
-        metadata
+      if (!req.user) throw new AppError('User not authenticated', 401);
+      // Only the order id is read from the request; amount/currency/provider come from the stored order.
+      const data = await createPaymentForOrder(
+        { userId: req.user.userId, role: req.user.role },
+        String(req.body.orderId)
       );
-
-      const response: ApiResponse = {
-        success: result.success,
-        data: result.success ? { paymentUrl: result.paymentUrl, providerPaymentId: result.providerPaymentId } : undefined,
-        error: result.error,
-      };
-
-      res.status(result.success ? 201 : 400).json(response);
+      const response: ApiResponse = { success: true, data };
+      res.status(201).json(response);
     } catch (error) {
       next(error);
     }
@@ -41,19 +23,23 @@ export class PaymentController {
 
   static async verifyPayment(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      if (!req.user) throw new AppError('User not authenticated', 401);
       const { providerPaymentId, provider } = req.body;
-
-      const result = await paymentService.verifyPayment(providerPaymentId, provider);
-
-      const response: ApiResponse = {
-        success: result.success,
-        data: result,
-      };
-
+      const result = await verifyAndFulfill(
+        { userId: req.user.userId, role: req.user.role },
+        providerPaymentId,
+        provider
+      );
+      const response: ApiResponse = { success: result.success, data: result };
       res.status(200).json(response);
     } catch (error) {
       next(error);
     }
+  }
+
+  static async webhook(req: Request, res: Response): Promise<void> {
+    const result = await handlePaymentWebhook(req.params.provider, (req as any).rawBody, req.headers);
+    res.status(result.status).json(result.body);
   }
 
   static async processRefund(req: Request, res: Response, next: NextFunction): Promise<void> {

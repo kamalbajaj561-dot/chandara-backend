@@ -150,6 +150,30 @@ export class OrderRepository {
     return this.mapDocToOrder(updatedDoc);
   }
 
+  /**
+   * Atomically claims the right to issue tickets for a paid order (prevents double issuance when the
+   * verify endpoint and a provider webhook race). Returns the order if the claim succeeded, else null.
+   */
+  async claimFulfillment(orderId: string): Promise<TicketingOrder | null> {
+    const db = getFirestore();
+    if (!db) throw new Error('Firestore not initialized');
+    const ref = db.collection(this.collection).doc(orderId);
+    return db.runTransaction(async (tx: admin.firestore.Transaction) => {
+      const doc = await tx.get(ref);
+      if (!doc.exists) return null;
+      const data = doc.data() || {};
+      if (data.status !== 'paid' || data.fulfillmentClaimed === true || (data.ticketIds || []).length > 0) {
+        return null;
+      }
+      tx.update(ref, { fulfillmentClaimed: true, updatedAt: new Date() });
+      return this.mapDocToOrder(doc);
+    });
+  }
+
+  async releaseFulfillmentClaim(orderId: string): Promise<void> {
+    await this.db.collection(this.collection).doc(orderId).update({ fulfillmentClaimed: false, updatedAt: new Date() });
+  }
+
   async updateStatus(orderId: string, status: OrderStatus): Promise<TicketingOrder | null> {
     return this.update(orderId, { status });
   }
@@ -218,6 +242,7 @@ export class OrderRepository {
       creatorId: data.creatorId || '',
       eventId: data.eventId || '',
       ticketIds: data.ticketIds || [],
+      items: data.items || undefined,
       subtotal: data.subtotal || 0,
       discount: data.discount || 0,
       tax: data.tax || 0,

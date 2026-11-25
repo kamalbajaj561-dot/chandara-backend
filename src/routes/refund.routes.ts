@@ -2,14 +2,15 @@ import { Router } from 'express';
 import { RefundController } from '../controllers/refund.controller';
 import { authMiddleware, requireRole } from '../middleware/auth';
 import { validateCreateRefund } from '../validators/ticketing.validators';
+import { fromBody } from '../middleware/validate';
 
 const router = Router();
 
 // Protected routes - require authentication
-router.post('/', authMiddleware, validateCreateRefund, RefundController.createRefund);
+router.post('/', authMiddleware, fromBody(validateCreateRefund), RefundController.createRefund);
+router.get('/my-refunds', authMiddleware, RefundController.getRefundsByUserId);
 router.get('/:refundId', authMiddleware, RefundController.getRefundById);
 router.get('/order/:orderId', authMiddleware, RefundController.getRefundsByOrderId);
-router.get('/my-refunds', authMiddleware, RefundController.getRefundsByUserId);
 
 // Admin only routes
 router.get('/status/:status', authMiddleware, requireRole('administrator'), RefundController.getRefundsByStatus);

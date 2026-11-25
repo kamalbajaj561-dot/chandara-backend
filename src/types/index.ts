@@ -168,6 +168,7 @@ export interface TicketingOrder {
   creatorId: string;
   eventId: string;
   ticketIds: string[];
+  items?: Array<{ ticketType: TicketType; price: number; quantity: number }>;
   subtotal: number;
   discount: number;
   tax: number;

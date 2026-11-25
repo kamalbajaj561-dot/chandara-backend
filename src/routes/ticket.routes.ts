@@ -2,11 +2,12 @@ import { Router } from 'express';
 import { TicketController } from '../controllers/ticket.controller';
 import { authMiddleware, requireRole } from '../middleware/auth';
 import { validateValidateTicket } from '../validators/ticketing.validators';
+import { fromBody } from '../middleware/validate';
 
 const router = Router();
 
 // Public routes
-router.post('/validate', validateValidateTicket, TicketController.validateTicket);
+router.post('/validate', fromBody(validateValidateTicket), TicketController.validateTicket);
 
 // Protected routes - require authentication
 router.get('/my-tickets', authMiddleware, TicketController.getTicketsByUserId);

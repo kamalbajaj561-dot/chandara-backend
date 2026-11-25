@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { NotificationController } from '../controllers/notification.controller';
 import { authMiddleware } from '../middleware/auth';
 import { validateCreateNotification, validateNotificationPreferences } from '../validators/notification.validators';
+import { fromBody } from '../middleware/validate';
 
 const router = Router();
 
@@ -21,13 +22,13 @@ router.get('/unread-count', NotificationController.getUnreadCount);
 router.get('/preferences', NotificationController.getPreferences);
 
 // Update notification preferences
-router.put('/preferences', validateNotificationPreferences, NotificationController.updatePreferences);
+router.put('/preferences', fromBody(validateNotificationPreferences), NotificationController.updatePreferences);
 
 // Get single notification
 router.get('/:id', NotificationController.getNotification);
 
 // Create notification (admin can send to others, users can only send to themselves)
-router.post('/', validateCreateNotification, NotificationController.createNotification);
+router.post('/', fromBody(validateCreateNotification), NotificationController.createNotification);
 
 // Mark notification as read
 router.put('/:id/read', NotificationController.markAsRead);

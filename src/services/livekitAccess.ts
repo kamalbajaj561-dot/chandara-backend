@@ -2,6 +2,7 @@ import { eventService } from './event.service';
 import { ticketRepository } from '../repositories/ticket.repository';
 import { AppError } from '../middleware/errorHandler';
 import { Event, TicketingTicket } from '../types';
+import { getEventOwnerId, NON_PUBLIC_EVENT_STATUSES } from '../utils/eventOwner';
 
 export type LiveKitRole = 'publisher' | 'subscriber' | 'moderator';
 
@@ -62,7 +63,7 @@ export async function authorizeLiveKitAccess(
   const event = await resolveEvent(roomName, deps);
   if (!event) throw new AppError('Event not found', 404);
 
-  const isOwner = event.creatorUid === user.userId;
+  const isOwner = getEventOwnerId(event) === user.userId;
 
   if (role === 'publisher' || role === 'moderator') {
     if (!isOwner) throw new AppError('Only the event creator can publish or moderate this stream', 403);
@@ -70,7 +71,7 @@ export async function authorizeLiveKitAccess(
   }
 
   if (isOwner) return;
-  if (event.status === 'draft' || event.status === 'cancelled') {
+  if (NON_PUBLIC_EVENT_STATUSES.includes(event.status as string)) {
     throw new AppError('This event is not available', 403);
   }
   if (event.ticketPrice > 0) {

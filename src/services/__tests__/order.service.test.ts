@@ -34,9 +34,10 @@ describe('OrderService', () => {
 
       const { orderRepository } = require('../../repositories/order.repository');
       orderRepository.create = jest.fn().mockResolvedValue(mockOrder);
+      orderService.eventLookup = jest.fn().mockResolvedValue({ id: 'event1', ownerId: 'creator1', status: 'live', ticketPrice: 100, currency: 'USD' });
 
       const items = [
-        { ticketType: 'general', price: 100, quantity: 2 },
+        { ticketType: 'general', price: 0.01, quantity: 2 }, // client-sent price must be ignored
       ];
 
       const result = await orderService.createOrder(
@@ -49,7 +50,50 @@ describe('OrderService', () => {
       );
 
       expect(orderRepository.create).toHaveBeenCalled();
+      const saved = (orderRepository.create as jest.Mock).mock.calls[0][0];
+      expect(saved.subtotal).toBe(200); // 2 x server price 100, not 2 x client 0.01
+      expect(saved.items).toEqual([{ ticketType: 'regular', price: 100, quantity: 2 }]);
+      expect(saved.creatorId).toBe('creator1');
       expect(result).toEqual({ success: true, order: mockOrder });
+    });
+
+    const create = (overrides: any = {}, items: any[] = [{ ticketType: 'general', price: 1, quantity: 1 }], provider: any = 'razorpay') => {
+      const { orderRepository } = require('../../repositories/order.repository');
+      orderRepository.create = jest.fn();
+      orderService.eventLookup = jest.fn().mockResolvedValue({ id: 'event1', ownerId: 'c', status: 'live', ticketPrice: 50, ...overrides });
+      return orderService.createOrder('user1', '', 'event1', items, 'USD' as Currency, provider);
+    };
+
+    it('rejects unknown events', async () => {
+      const { orderRepository } = require('../../repositories/order.repository');
+      orderService.eventLookup = jest.fn().mockRejectedValue(new Error('nope'));
+      const r = await orderService.createOrder('u', '', 'x', [{ ticketType: 'general', price: 1, quantity: 1 }], 'USD' as Currency, 'razorpay');
+      expect(r.success).toBe(false);
+      expect(orderRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects ended, cancelled, pending and free events', async () => {
+      for (const status of ['ended', 'cancelled', 'pending', 'draft', 'rejected']) {
+        expect((await create({ status })).success).toBe(false);
+      }
+      expect((await create({ ticketPrice: 0 })).success).toBe(false);
+    });
+
+    it('rejects bad quantities and unsupported ticket types', async () => {
+      expect((await create({}, [{ ticketType: 'general', price: 1, quantity: 11 }])).success).toBe(false);
+      expect((await create({}, [{ ticketType: 'general', price: 1, quantity: 0 }])).success).toBe(false);
+      expect((await create({}, [{ ticketType: 'vip', price: 1, quantity: 1 }])).success).toBe(false);
+    });
+
+    it('rejects the mock provider in production', async () => {
+      const config = require('../../config').default;
+      const prev = config.nodeEnv;
+      config.nodeEnv = 'production';
+      try {
+        expect((await create({}, undefined, 'mock')).success).toBe(false);
+      } finally {
+        config.nodeEnv = prev;
+      }
     });
   });
 
