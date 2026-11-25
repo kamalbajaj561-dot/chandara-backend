@@ -127,11 +127,25 @@ describe('OrderService', () => {
       const { orderRepository } = require('../../repositories/order.repository');
       orderRepository.findById = jest.fn().mockResolvedValue(mockOrder);
       orderRepository.updateStatus = jest.fn().mockResolvedValue(mockOrder);
+      // The module is auto-mocked; use the REAL transition rules so this test exercises them.
+      const realRepo = jest.requireActual('../../repositories/order.repository').orderRepository;
+      orderRepository.isValidTransition = (from: OrderStatus, to: OrderStatus) => realRepo.isValidTransition(from, to);
 
       const result = await orderService.updateOrderStatus('order1', 'paid' as OrderStatus);
 
       expect(orderRepository.updateStatus).toHaveBeenCalledWith('order1', 'paid');
       expect(result).toEqual(mockOrder);
+    });
+
+    it('should reject an invalid status transition (paid -> pending)', async () => {
+      const { orderRepository } = require('../../repositories/order.repository');
+      const realRepo = jest.requireActual('../../repositories/order.repository').orderRepository;
+      orderRepository.isValidTransition = (from: OrderStatus, to: OrderStatus) => realRepo.isValidTransition(from, to);
+      orderRepository.findById = jest.fn().mockResolvedValue({ orderId: 'order1', status: 'paid' });
+      orderRepository.updateStatus = jest.fn();
+
+      await expect(orderService.updateOrderStatus('order1', 'pending' as OrderStatus)).rejects.toThrow('Invalid status transition');
+      expect(orderRepository.updateStatus).not.toHaveBeenCalled();
     });
   });
 

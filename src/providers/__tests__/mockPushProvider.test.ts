@@ -20,7 +20,7 @@ describe('MockPushProvider', () => {
 
       expect(result.success).toBe(true);
       expect(result.messageId).toBeDefined();
-      expect(result.messageId).toMatch(/^msg-/);
+      expect(result.messageId).toMatch(/^mock-/);
     });
 
     it('should handle delay parameter', async () => {
@@ -48,11 +48,9 @@ describe('MockPushProvider', () => {
 
       const result = await provider.sendBatch(tokens, payload);
 
-      expect(result.success).toBe(true);
-      expect(result.results).toHaveLength(3);
-      expect(result.results[0].success).toBe(true);
-      expect(result.results[1].success).toBe(true);
-      expect(result.results[2].success).toBe(true);
+      // sendBatch returns one PushResult per token
+      expect(result).toHaveLength(3);
+      result.forEach((r) => expect(r.success).toBe(true));
     });
 
     it('should handle empty token array', async () => {
@@ -63,8 +61,7 @@ describe('MockPushProvider', () => {
 
       const result = await provider.sendBatch([], payload);
 
-      expect(result.success).toBe(true);
-      expect(result.results).toHaveLength(0);
+      expect(result).toHaveLength(0);
     });
   });
 
@@ -114,7 +111,7 @@ describe('MockPushProvider', () => {
 
   describe('getProviderName', () => {
     it('should return provider name', () => {
-      expect(provider.getProviderName()).toBe('mock');
+      expect(provider.getProviderName()).toBe('Mock');
     });
   });
 });

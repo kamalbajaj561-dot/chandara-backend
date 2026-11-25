@@ -375,6 +375,7 @@ describe('StreamService', () => {
       (incrementCache as jest.Mock).mockResolvedValue(1);
       mockStreamRepository.getByEvent.mockResolvedValue(mockStream);
       mockStreamRepository.updateViewerCount.mockResolvedValue(mockStream);
+      mockStreamRepository.findById.mockResolvedValue(mockStream);
 
       const result = await streamService.joinStream('stream-id-123', 'user-123', 'subscriber');
 
@@ -425,6 +426,8 @@ describe('StreamService', () => {
       (decrementCache as jest.Mock).mockResolvedValue(0);
       mockStreamRepository.findByStreamId.mockResolvedValue(mockStream);
       mockStreamRepository.updateViewerCount.mockResolvedValue(mockStream);
+      mockStreamRepository.getByEvent.mockResolvedValue(mockStream);
+      mockStreamRepository.findById.mockResolvedValue(mockStream);
 
       const result = await streamService.leaveStream('stream-id-123', 'user-123');
 

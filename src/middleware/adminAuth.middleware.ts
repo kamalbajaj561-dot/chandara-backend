@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { UserRepository } from '../repositories/user.repository';
 import logger from '../utils/logger';
+import { normalizeRole } from './auth';
 
 /**
  * Admin Authorization Middleware
@@ -8,7 +9,7 @@ import logger from '../utils/logger';
  */
 export async function requireAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const userId = (req.user as any)?.id;
+    const userId = req.user?.userId;
     
     if (!userId) {
       res.status(401).json({ error: 'Unauthorized' });
@@ -22,7 +23,7 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
       return;
     }
 
-    if (user.role !== 'administrator') {
+    if (normalizeRole(user.role) !== 'administrator') {
       logger.warn(`Non-admin user ${userId} attempted to access admin endpoint`);
       res.status(403).json({ error: 'Forbidden: Administrator access required' });
       return;
@@ -43,7 +44,7 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
  */
 export async function optionalAdmin(req: Request, _res: Response, next: NextFunction): Promise<void> {
   try {
-    const userId = (req.user as any)?.id;
+    const userId = req.user?.userId;
     
     if (!userId) {
       (req as any).isAdmin = false;

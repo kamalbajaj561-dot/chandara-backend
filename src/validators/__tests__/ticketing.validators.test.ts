@@ -167,7 +167,7 @@ describe('Ticketing Validators', () => {
         value: 20,
         maxUses: 100,
         minPurchase: 50,
-        expiryDate: new Date('2025-12-31'),
+        expiryDate: new Date('2099-12-31'),
       };
 
       const result = validateCreateCoupon(validData);

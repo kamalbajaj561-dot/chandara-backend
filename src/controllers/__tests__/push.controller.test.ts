@@ -7,8 +7,21 @@ import { pushLogRepository } from '../../repositories/pushLog.repository';
 import { AppError } from '../../middleware/errorHandler';
 
 jest.mock('../../repositories/deviceToken.repository');
-jest.mock('../../services/pushNotification.service');
-jest.mock('../../services/scheduler.service');
+// These services are exported as lazy Proxies, which jest's automock cannot introspect,
+// so provide explicit mock objects.
+jest.mock('../../services/pushNotification.service', () => ({
+  pushNotificationService: { sendToUser: jest.fn(), sendToTopic: jest.fn() },
+}));
+jest.mock('../../services/scheduler.service', () => ({
+  schedulerService: {
+    schedule: jest.fn(),
+    schedulePushNotification: jest.fn(),
+    getUserScheduledNotifications: jest.fn(),
+    getSchedulerStatistics: jest.fn(),
+    getPendingJobs: jest.fn(),
+    execute: jest.fn(),
+  },
+}));
 jest.mock('../../repositories/pushLog.repository');
 
 describe('PushController', () => {
@@ -162,7 +175,7 @@ describe('PushController', () => {
         scheduledFor: new Date(Date.now() + 3600000).toISOString(),
       };
 
-      (schedulerService.schedule as jest.Mock).mockResolvedValue('job-123');
+      (schedulerService.schedulePushNotification as jest.Mock).mockResolvedValue('job-123');
 
       await controller.schedulePush(mockReq as Request, mockRes as Response, mockNext);
 

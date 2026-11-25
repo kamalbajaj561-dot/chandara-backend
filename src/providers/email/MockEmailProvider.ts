@@ -84,7 +84,8 @@ export class MockEmailProvider implements EmailProvider {
    * Get all logged emails (useful for testing)
    */
   getEmailLog(): MockEmailLog[] {
-    return [...this.emailLog];
+    // Return copies so callers cannot mutate the internal log
+    return this.emailLog.map((entry) => ({ ...entry }));
   }
 
   /**

@@ -51,9 +51,13 @@ describe('Rate Limiting Middleware', () => {
 
       const limiter = createRateLimiter({ maxRequests: 5, windowMs: 60000 });
 
-      await expect(limiter(mockReq as Request, mockRes as Response, mockNext)).rejects.toThrow(
-        AppError
-      );
+      // Express 4 async middleware must forward errors via next() rather than throw.
+      await limiter(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockNext).toHaveBeenCalledTimes(1);
+      const forwarded = (mockNext as jest.Mock).mock.calls[0][0];
+      expect(forwarded).toBeInstanceOf(AppError);
+      expect(forwarded.statusCode).toBe(429);
     });
 
     it('should set expiration on first request', async () => {

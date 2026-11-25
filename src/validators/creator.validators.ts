@@ -15,7 +15,7 @@ export const validateCreateCreator = (data: any) => {
     bio: Joi.string().max(500).optional(),
     avatar: Joi.string().uri().optional(),
     banner: Joi.string().uri().optional(),
-    category: Joi.string().max(50).optional(),
+    category: Joi.string().valid('music', 'sports', 'gaming', 'education', 'entertainment', 'business', 'other').optional(),
     language: Joi.string().length(2).optional(),
     country: Joi.string().length(2).optional(),
     socialLinks: Joi.object({
@@ -59,7 +59,7 @@ export const validateUpdateCreatorProfile = (data: any) => {
     bio: Joi.string().max(500).optional(),
     avatar: Joi.string().uri().optional(),
     banner: Joi.string().uri().optional(),
-    category: Joi.string().max(50).optional(),
+    category: Joi.string().valid('music', 'sports', 'gaming', 'education', 'entertainment', 'business', 'other').optional(),
     language: Joi.string().length(2).optional(),
     country: Joi.string().length(2).optional(),
     socialLinks: Joi.object({
@@ -147,7 +147,7 @@ export const validateListCreators = (data: any) => {
   const schema = Joi.object({
     limit: Joi.number().min(1).max(100).optional().default(20),
     offset: Joi.number().min(0).optional().default(0),
-    category: Joi.string().max(50).optional(),
+    category: Joi.string().valid('music', 'sports', 'gaming', 'education', 'entertainment', 'business', 'other').optional(),
     verified: Joi.boolean().optional(),
     featured: Joi.boolean().optional(),
     verificationStatus: Joi.string().valid('pending', 'approved', 'rejected').optional(),
@@ -173,7 +173,7 @@ export const validateListCreators = (data: any) => {
 
 export const validateSubmitVerificationRequest = (data: any) => {
   const schema = Joi.object({
-    documentType: Joi.string().min(2).max(100).required(),
+    documentType: Joi.string().valid('passport', 'national_id', 'drivers_license', 'business_registration', 'other').required(),
     documentNumber: Joi.string().max(100).optional(),
     additionalInfo: Joi.string().max(500).optional(),
   });
@@ -221,7 +221,7 @@ export const validateRejectVerificationRequest = (data: any) => {
 
 export const validateSetFeatured = (data: any) => {
   const schema = Joi.object({
-    featured: Joi.boolean().required(),
+    featured: Joi.boolean().strict().required(),
   });
 
   const { error, value } = schema.validate(data, { abortEarly: false });

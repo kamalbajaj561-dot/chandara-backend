@@ -17,17 +17,20 @@ describe('Logger', () => {
     expect(logger.warn).toBeDefined();
   });
 
-  it('should log info message', () => {
-    const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+  it('should write info and error messages through its transports', () => {
+    // winston writes via its own transports, not console.log; assert on the transport stream.
+    const winston = require('winston');
+    const Transport = require('winston-transport');
+    const received: any[] = [];
+    class Capture extends Transport {
+      log(info: any, cb: () => void) { received.push(info); cb(); }
+    }
+    const transport = new Capture();
+    logger.add(transport as any);
     logger.info('Test info message');
-    expect(consoleSpy).toHaveBeenCalled();
-    consoleSpy.mockRestore();
-  });
-
-  it('should log error message', () => {
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
     logger.error('Test error message');
-    expect(consoleSpy).toHaveBeenCalled();
-    consoleSpy.mockRestore();
+    logger.remove(transport as any);
+    expect(received.map((r) => r.message)).toEqual(expect.arrayContaining(['Test info message', 'Test error message']));
+    expect(winston).toBeDefined();
   });
 });

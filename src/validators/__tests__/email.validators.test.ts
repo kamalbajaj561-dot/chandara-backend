@@ -172,7 +172,8 @@ describe('Email Validators', () => {
 
       const result = validateEmailQuery(data);
 
-      expect(result).toEqual(data);
+      // schema applies a default batch size
+      expect(result).toEqual({ ...data, batchSize: 10 });
     });
 
     it('should apply default values', () => {

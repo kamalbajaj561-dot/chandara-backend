@@ -21,14 +21,15 @@ describe('Event Validators', () => {
         currency: 'USD',
         cameraType: '4K',
         streamType: 'live',
-        eventDate: '2025-12-31',
+        eventDate: '2099-12-31',
         eventTime: '20:00',
         capacity: 1000,
       };
 
       const result = validateCreateEvent(validData);
 
-      expect(result).toEqual(validData);
+      // Joi converts the ISO date string to a Date
+      expect(result).toEqual({ ...validData, eventDate: new Date(validData.eventDate), featured: false });
     });
 
     it('should throw error for missing required fields', () => {
@@ -51,7 +52,7 @@ describe('Event Validators', () => {
         currency: 'USD',
         cameraType: '4K',
         streamType: 'live',
-        eventDate: '2025-12-31',
+        eventDate: '2099-12-31',
         eventTime: '20:00',
         capacity: 1000,
       };
@@ -70,7 +71,7 @@ describe('Event Validators', () => {
         currency: 'USD',
         cameraType: '4K',
         streamType: 'invalid',
-        eventDate: '2025-12-31',
+        eventDate: '2099-12-31',
         eventTime: '20:00',
         capacity: 1000,
       };
@@ -108,7 +109,7 @@ describe('Event Validators', () => {
         currency: 'USD',
         cameraType: '4K',
         streamType: 'live',
-        eventDate: '2025-12-31',
+        eventDate: '2099-12-31',
         eventTime: '25:00',
         capacity: 1000,
       };
@@ -127,7 +128,7 @@ describe('Event Validators', () => {
         currency: 'USD',
         cameraType: '4K',
         streamType: 'live',
-        eventDate: '2025-12-31',
+        eventDate: '2099-12-31',
         eventTime: '20:00',
         capacity: 1000,
         tags: ['music', 'live'],
@@ -141,7 +142,8 @@ describe('Event Validators', () => {
 
       const result = validateCreateEvent(validData);
 
-      expect(result).toEqual(validData);
+      // Joi converts the ISO date string to a Date
+      expect(result).toEqual({ ...validData, eventDate: new Date(validData.eventDate) });
     });
   });
 

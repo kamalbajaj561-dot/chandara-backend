@@ -292,7 +292,8 @@ describe('Chat Validators', () => {
         q: 'search query',
       };
       const result = validateSearchMessages(validData);
-      expect(result).toEqual(validData);
+      // schema applies a default page size
+      expect(result).toEqual({ ...validData, limit: 50 });
     });
 
     it('should reject empty query', () => {

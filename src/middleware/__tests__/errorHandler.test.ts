@@ -10,7 +10,9 @@ describe('Error Handler Middleware', () => {
     mockReq = {
       path: '/test',
       method: 'GET',
-    };
+      ip: '127.0.0.1',
+      get: jest.fn().mockReturnValue('jest-agent'),
+    } as Partial<Request>;
     mockRes = {
       status: jest.fn().mockReturnThis(),
       json: jest.fn().mockReturnThis(),
@@ -71,14 +73,17 @@ describe('Error Handler Middleware', () => {
     it('should return 404 with error message', () => {
       mockReq = {
         originalUrl: '/not-found',
-      };
+        method: 'GET',
+        ip: '127.0.0.1',
+        get: jest.fn().mockReturnValue('jest-agent'),
+      } as Partial<Request>;
 
       notFoundHandler(mockReq as Request, mockRes as Response);
 
       expect(mockRes.status).toHaveBeenCalledWith(404);
       expect(mockRes.json).toHaveBeenCalledWith({
         success: false,
-        error: 'Route /not-found not found',
+        error: 'Route not found',
       });
     });
   });

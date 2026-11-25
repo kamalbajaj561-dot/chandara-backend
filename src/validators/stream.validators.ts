@@ -3,7 +3,7 @@ import { AppError } from '../middleware/errorHandler';
 
 export const validateStartStream = (data: any) => {
   const schema = Joi.object({
-    recordingEnabled: Joi.boolean().default(false),
+    recordingEnabled: Joi.boolean().strict().default(false),
   });
 
   const { error, value } = schema.validate(data);

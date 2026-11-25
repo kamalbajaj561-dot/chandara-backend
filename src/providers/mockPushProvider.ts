@@ -86,7 +86,8 @@ export class MockPushProvider implements PushProvider {
   async validateToken(deviceToken: string): Promise<boolean> {
     await this.simulateDelay();
     // Invalid tokens contain 'invalid' in the string
-    return !deviceToken.includes('invalid');
+    // Empty tokens and tokens containing 'invalid' are rejected
+    return deviceToken.trim().length > 0 && !deviceToken.includes('invalid');
   }
 
   getProviderName(): string {

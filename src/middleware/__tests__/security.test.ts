@@ -15,7 +15,10 @@ describe('Security Middleware Tests', () => {
         query: {},
         params: {},
       };
-      mockRes = {};
+      mockRes = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
+      };
       mockNext = jest.fn();
     });
 
@@ -28,22 +31,25 @@ describe('Security Middleware Tests', () => {
 
         sanitizeBody(mockReq as Request, mockRes as Response, mockNext);
 
-        expect(mockReq.body.name).toBe('&lt;script&gt;alert("xss")&lt;/script&gt;');
-        expect(mockReq.body.description).toBe('Test &lt;img src=x onerror=alert(1)&gt;');
+        // Tags are stripped entirely: no <script>/<img> can survive.
+        expect(mockReq.body.name).toBe('alert("xss")');
+        expect(mockReq.body.name).not.toMatch(/</);
+        expect(mockReq.body.description).toBe('Test');
         expect(mockNext).toHaveBeenCalled();
       });
 
       it('should remove prototype pollution keys', () => {
-        mockReq.body = {
-          name: 'test',
-          __proto__: { polluted: true },
-          constructor: { prototype: { polluted: true } },
-        };
+        // JSON.parse creates real own properties named __proto__/constructor
+        mockReq.body = JSON.parse(
+          '{"name":"test","__proto__":{"polluted":true},"constructor":{"prototype":{"polluted":true}}}'
+        );
 
         sanitizeBody(mockReq as Request, mockRes as Response, mockNext);
 
-        expect(mockReq.body.__proto__).toBeUndefined();
-        expect(mockReq.body.constructor).toBeUndefined();
+        expect(Object.keys(mockReq.body)).toEqual(['name']);
+        expect(Object.prototype.hasOwnProperty.call(mockReq.body, '__proto__')).toBe(false);
+        expect(Object.prototype.hasOwnProperty.call(mockReq.body, 'constructor')).toBe(false);
+        expect(({} as any).polluted).toBeUndefined();
         expect(mockNext).toHaveBeenCalled();
       });
 
@@ -57,7 +63,7 @@ describe('Security Middleware Tests', () => {
 
         sanitizeBody(mockReq as Request, mockRes as Response, mockNext);
 
-        expect(mockReq.body.user.name).toBe('&lt;script&gt;alert("xss")&lt;/script&gt;');
+        expect(mockReq.body.user.name).toBe('alert("xss")');
         expect(mockReq.body.user.email).toBe('test@example.com');
       });
 
@@ -68,9 +74,9 @@ describe('Security Middleware Tests', () => {
 
         sanitizeBody(mockReq as Request, mockRes as Response, mockNext);
 
-        expect(mockReq.body.tags[0]).toBe('&lt;script&gt;alert(1)&lt;/script&gt;');
+        expect(mockReq.body.tags[0]).toBe('alert(1)');
         expect(mockReq.body.tags[1]).toBe('normal');
-        expect(mockReq.body.tags[2]).toBe('&lt;img src=x onerror=alert(1)&gt;');
+        expect(mockReq.body.tags[2]).toBe('');
       });
     });
 
@@ -83,7 +89,7 @@ describe('Security Middleware Tests', () => {
 
         sanitizeQuery(mockReq as Request, mockRes as Response, mockNext);
 
-        expect(mockReq.query.search).toBe('&lt;script&gt;alert("xss")&lt;/script&gt;');
+        expect(mockReq.query.search).toBe('alert("xss")');
         expect(mockNext).toHaveBeenCalled();
       });
     });
@@ -96,7 +102,7 @@ describe('Security Middleware Tests', () => {
 
         sanitizeParams(mockReq as Request, mockRes as Response, mockNext);
 
-        expect(mockReq.params.id).toBe('&lt;script&gt;alert("xss")&lt;/script&gt;');
+        expect(mockReq.params.id).toBe('alert("xss")');
         expect(mockNext).toHaveBeenCalled();
       });
     });
@@ -111,6 +117,7 @@ describe('Security Middleware Tests', () => {
         preventNoSQLInjection(mockReq as Request, mockRes as Response, mockNext);
 
         expect(mockNext).not.toHaveBeenCalled();
+        expect(mockRes.status).toHaveBeenCalledWith(400);
       });
 
       it('should allow safe requests', () => {
@@ -144,74 +151,64 @@ describe('Security Middleware Tests', () => {
     });
 
     describe('authMiddleware', () => {
-      it('should reject requests without token', async () => {
+      const firebase = require('../../services/firebase');
+      const mockUserDoc = (data: any | null) => ({
+        collection: () => ({ doc: () => ({ get: async () => ({ exists: data !== null, data: () => data }) }) }),
+      });
+      const withFirebase = (verifyIdToken: jest.Mock, userData: any | null) => {
+        firebase.getAuth.mockReturnValue({ verifyIdToken });
+        firebase.getFirestore.mockReturnValue(mockUserDoc(userData));
+      };
+      const nextError = () => (mockNext as jest.Mock).mock.calls[0][0];
+
+      it('rejects requests without a token via next(401) and never throws', async () => {
         mockReq.headers = {};
-
-        await authMiddleware(mockReq as Request, mockRes as Response, mockNext);
-
-        expect(mockNext).not.toHaveBeenCalled();
-        expect(mockRes.status).toHaveBeenCalledWith(401);
+        await expect(authMiddleware(mockReq as Request, mockRes as Response, mockNext)).resolves.toBeUndefined();
+        expect(nextError()).toBeInstanceOf(AppError);
+        expect(nextError().statusCode).toBe(401);
       });
 
-      it('should reject requests with invalid token format', async () => {
-        mockReq.headers = {
-          authorization: 'InvalidFormat token',
-        };
-
+      it('rejects a malformed Authorization header', async () => {
+        mockReq.headers = { authorization: 'InvalidFormat token' };
         await authMiddleware(mockReq as Request, mockRes as Response, mockNext);
-
-        expect(mockNext).not.toHaveBeenCalled();
-        expect(mockRes.status).toHaveBeenCalledWith(401);
+        expect(nextError().statusCode).toBe(401);
       });
 
-      it('should handle missing user gracefully', async () => {
-        mockReq.headers = {
-          authorization: 'Bearer valid_token',
-        };
-        mockReq.user = undefined;
-
+      it('rejects an invalid/expired Firebase token with 401', async () => {
+        withFirebase(jest.fn().mockRejectedValue(new Error('expired')), { role: 'user' });
+        mockReq.headers = { authorization: 'Bearer bad' };
         await authMiddleware(mockReq as Request, mockRes as Response, mockNext);
-
-        expect(mockNext).not.toHaveBeenCalled();
-        expect(mockRes.status).toHaveBeenCalledWith(401);
+        expect(nextError().statusCode).toBe(401);
       });
 
-      it('should reject suspended users', async () => {
-        mockReq.headers = {
-          authorization: 'Bearer valid_token',
-        };
-        mockReq.user = {
-          userId: 'test_user',
-          email: 'test@example.com',
-          role: 'viewer',
-          type: 'access',
-          iat: Date.now(),
-          exp: Date.now() + 3600000,
-        };
-
+      it('rejects tokens whose user has no Firestore record', async () => {
+        withFirebase(jest.fn().mockResolvedValue({ uid: 'u1', email: 'a@b.c' }), null);
+        mockReq.headers = { authorization: 'Bearer ok' };
         await authMiddleware(mockReq as Request, mockRes as Response, mockNext);
-
-        expect(mockNext).not.toHaveBeenCalled();
-        expect(mockRes.status).toHaveBeenCalledWith(403);
+        expect(nextError().statusCode).toBe(404);
+        expect(mockReq.user).toBeUndefined();
       });
 
-      it('should reject banned users', async () => {
-        mockReq.headers = {
-          authorization: 'Bearer valid_token',
-        };
-        mockReq.user = {
-          userId: 'test_user',
-          email: 'test@example.com',
-          role: 'viewer',
-          type: 'access',
-          iat: Date.now(),
-          exp: Date.now() + 3600000,
-        };
-
+      it('rejects suspended users with 403', async () => {
+        withFirebase(jest.fn().mockResolvedValue({ uid: 'u1' }), { role: 'user', status: 'suspended' });
+        mockReq.headers = { authorization: 'Bearer ok' };
         await authMiddleware(mockReq as Request, mockRes as Response, mockNext);
+        expect(nextError().statusCode).toBe(403);
+      });
 
-        expect(mockNext).not.toHaveBeenCalled();
-        expect(mockRes.status).toHaveBeenCalledWith(403);
+      it('rejects banned users with 403', async () => {
+        withFirebase(jest.fn().mockResolvedValue({ uid: 'u1' }), { role: 'user', status: 'banned' });
+        mockReq.headers = { authorization: 'Bearer ok' };
+        await authMiddleware(mockReq as Request, mockRes as Response, mockNext);
+        expect(nextError().statusCode).toBe(403);
+      });
+
+      it('accepts a valid user, normalizes the role and exposes userId and id', async () => {
+        withFirebase(jest.fn().mockResolvedValue({ uid: 'u1', email: 'a@b.c' }), { role: 'admin', status: 'active' });
+        mockReq.headers = { authorization: 'Bearer ok' };
+        await authMiddleware(mockReq as Request, mockRes as Response, mockNext);
+        expect(mockNext).toHaveBeenCalledWith();
+        expect(mockReq.user).toMatchObject({ userId: 'u1', id: 'u1', role: 'administrator' });
       });
     });
 
@@ -245,8 +242,7 @@ describe('Security Middleware Tests', () => {
         const middleware = requireRole('administrator');
         middleware(mockReq as Request, mockRes as Response, mockNext);
 
-        expect(mockNext).not.toHaveBeenCalled();
-        expect(mockRes.status).toHaveBeenCalledWith(403);
+        expect(mockNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }));
       });
 
       it('should reject unauthenticated users', () => {
@@ -255,8 +251,7 @@ describe('Security Middleware Tests', () => {
         const middleware = requireRole('administrator');
         middleware(mockReq as Request, mockRes as Response, mockNext);
 
-        expect(mockNext).not.toHaveBeenCalled();
-        expect(mockRes.status).toHaveBeenCalledWith(401);
+        expect(mockNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
       });
     });
   });
@@ -291,7 +286,7 @@ describe('Security Middleware Tests', () => {
 
     it('should hide stack traces in production', () => {
       const error = new AppError('Test error', 500);
-      mockReq = { path: '/test', method: 'GET', ip: '127.0.0.1' };
+      mockReq = { path: '/test', method: 'GET', ip: '127.0.0.1', get: jest.fn() } as Partial<Request>;
 
       // Mock production environment
       process.env.NODE_ENV = 'production';
@@ -299,13 +294,11 @@ describe('Security Middleware Tests', () => {
       const errorHandler = require('../errorHandler').errorHandler;
       errorHandler(error, mockReq as Request, mockRes as Response, mockNext);
 
-      expect(mockRes.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          success: false,
-          error: 'Test error',
-          errorId: expect.any(String),
-        })
-      );
+      const body = (mockRes.json as jest.Mock).mock.calls[0][0];
+      expect(body).toMatchObject({ success: false, error: 'Test error' });
+      // Never leak stack traces or internals to clients
+      expect(body).not.toHaveProperty('stack');
+      expect(JSON.stringify(body)).not.toMatch(/at .*\.ts:\d+/);
     });
   });
 

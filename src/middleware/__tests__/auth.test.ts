@@ -19,13 +19,15 @@ describe('Auth Middleware', () => {
     it('should throw error if no token provided', async () => {
       mockReq.headers.authorization = undefined;
 
-      await expect(authMiddleware(mockReq, mockRes, mockNext)).rejects.toThrow(AppError);
+      await authMiddleware(mockReq, mockRes, mockNext);
+      expect(mockNext).toHaveBeenCalledWith(expect.any(AppError));
     });
 
     it('should throw error if token is malformed', async () => {
       mockReq.headers.authorization = 'Bearer';
 
-      await expect(authMiddleware(mockReq, mockRes, mockNext)).rejects.toThrow(AppError);
+      await authMiddleware(mockReq, mockRes, mockNext);
+      expect(mockNext).toHaveBeenCalledWith(expect.any(AppError));
     });
 
     it('should throw error if token is invalid', async () => {
@@ -37,7 +39,8 @@ describe('Auth Middleware', () => {
 
       (getAuth as jest.Mock).mockReturnValue(mockAuth);
 
-      await expect(authMiddleware(mockReq, mockRes, mockNext)).rejects.toThrow(AppError);
+      await authMiddleware(mockReq, mockRes, mockNext);
+      expect(mockNext).toHaveBeenCalledWith(expect.any(AppError));
     });
 
     it('should set user on request if token is valid', async () => {
@@ -104,7 +107,8 @@ describe('Auth Middleware', () => {
 
       mockReq.headers.authorization = 'Bearer valid-firebase-token';
 
-      await expect(authMiddleware(mockReq, mockRes, mockNext)).rejects.toThrow(AppError);
+      await authMiddleware(mockReq, mockRes, mockNext);
+      expect(mockNext).toHaveBeenCalledWith(expect.any(AppError));
     });
 
     it('should throw error if user is banned', async () => {
@@ -134,7 +138,8 @@ describe('Auth Middleware', () => {
 
       mockReq.headers.authorization = 'Bearer valid-firebase-token';
 
-      await expect(authMiddleware(mockReq, mockRes, mockNext)).rejects.toThrow(AppError);
+      await authMiddleware(mockReq, mockRes, mockNext);
+      expect(mockNext).toHaveBeenCalledWith(expect.any(AppError));
     });
   });
 
@@ -143,14 +148,16 @@ describe('Auth Middleware', () => {
       mockReq.user = undefined;
       const middleware = requireRole('administrator');
 
-      expect(() => middleware(mockReq, mockRes, mockNext)).toThrow(AppError);
+      middleware(mockReq, mockRes, mockNext);
+      expect(mockNext).toHaveBeenCalledWith(expect.any(AppError));
     });
 
     it('should throw error if user role is not allowed', () => {
       mockReq.user = { role: 'viewer' };
       const middleware = requireRole('administrator');
 
-      expect(() => middleware(mockReq, mockRes, mockNext)).toThrow(AppError);
+      middleware(mockReq, mockRes, mockNext);
+      expect(mockNext).toHaveBeenCalledWith(expect.any(AppError));
     });
 
     it('should call next if user has required role', () => {

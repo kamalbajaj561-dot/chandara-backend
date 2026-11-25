@@ -47,7 +47,8 @@ export const createRateLimiter = (options: Partial<RateLimitOptions> = {}) => {
       next();
     } catch (error) {
       if (error instanceof AppError) {
-        throw error;
+        // Async middleware must not throw under Express 4; forward to the error handler.
+        return next(error);
       }
       logger.error('Rate limiter error:', error);
       // Fail open - allow request if rate limiter fails

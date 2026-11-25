@@ -6,6 +6,8 @@ import logger from '../utils/logger';
 
 interface JwtPayload {
   userId: string;
+  /** Alias of userId; several controllers read req.user.id. */
+  id?: string;
   email: string;
   role: string;
   type: 'access' | 'refresh';
@@ -83,6 +85,7 @@ export const authMiddleware = async (
     // Attach user info to request
     req.user = {
       userId: decodedToken.uid,
+      id: decodedToken.uid,
       email: decodedToken.email || '',
       role: normalizeRole(userData?.role),
       type: 'access',
@@ -92,22 +95,25 @@ export const authMiddleware = async (
 
     next();
   } catch (error) {
-    logger.error('Auth middleware error:', error);
+    // Express 4 does not catch rejections from async middleware: an uncaught throw here
+    // would be an unhandledRejection (server shutdown). Always hand the error to next().
     if (error instanceof AppError) {
-      throw error;
+      if (error.statusCode >= 500) logger.error('Auth middleware error:', error);
+      return next(error);
     }
-    throw new AppError('Invalid token', 401);
+    logger.warn('Auth middleware rejected request: invalid token');
+    return next(new AppError('Invalid token', 401));
   }
 };
 
 export const requireRole = (...roles: string[]) => {
   return (req: Request, _res: Response, next: NextFunction): void => {
     if (!req.user) {
-      throw new AppError('Authentication required', 401);
+      return next(new AppError('Authentication required', 401));
     }
 
     if (!roles.includes(req.user.role)) {
-      throw new AppError('Insufficient permissions', 403);
+      return next(new AppError('Insufficient permissions', 403));
     }
 
     next();
@@ -146,6 +152,7 @@ export const optionalAuth = async (
         if (userData?.status !== 'suspended' && userData?.status !== 'banned') {
           req.user = {
             userId: decodedToken.uid,
+      id: decodedToken.uid,
             email: decodedToken.email || '',
             role: normalizeRole(userData?.role),
             type: 'access',

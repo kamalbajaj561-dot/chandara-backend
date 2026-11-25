@@ -14,7 +14,7 @@ export const validateResendTicket = (req: any, _res: any, next: any): void => {
   const { error } = schema.validate(req.body);
 
   if (error) {
-    throw new AppError(error.details[0].message, 400);
+    return next(new AppError(error.details[0].message, 400));
   }
 
   next();
@@ -33,7 +33,7 @@ export const validateResendReceipt = (req: any, _res: any, next: any): void => {
   const { error } = schema.validate(req.body);
 
   if (error) {
-    throw new AppError(error.details[0].message, 400);
+    return next(new AppError(error.details[0].message, 400));
   }
 
   next();
@@ -53,7 +53,7 @@ export const validateAdminResend = (req: any, _res: any, next: any): void => {
   const { error } = schema.validate(req.body);
 
   if (error) {
-    throw new AppError(error.details[0].message, 400);
+    return next(new AppError(error.details[0].message, 400));
   }
 
   next();
@@ -72,7 +72,7 @@ export const validateDeliveryLogsQuery = (req: any, _res: any, next: any): void 
   const { error, value } = schema.validate(req.query);
 
   if (error) {
-    throw new AppError(error.details[0].message, 400);
+    return next(new AppError(error.details[0].message, 400));
   }
 
   req.query = value;
@@ -86,13 +86,14 @@ export const validateQRVerification = (req: any, _res: any, next: any): void => 
   const schema = Joi.object({
     qrPayload: Joi.string().required().messages({
       'any.required': 'QR payload is required',
+      'string.empty': 'QR payload is required',
     }),
   });
 
   const { error } = schema.validate(req.body);
 
   if (error) {
-    throw new AppError(error.details[0].message, 400);
+    return next(new AppError(error.details[0].message, 400));
   }
 
   next();
