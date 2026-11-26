@@ -8,6 +8,8 @@ interface JwtPayload {
   userId: string;
   /** Alias of userId; several controllers read req.user.id. */
   id?: string;
+  /** Public display name (from the user's profile) used as chat sender name. */
+  displayName?: string;
   email: string;
   role: string;
   type: 'access' | 'refresh';
@@ -30,6 +32,11 @@ const ROLE_ALIASES: Record<string, string> = {
   streamer: 'creator',
   admin: 'administrator',
 };
+export const sanitizeDisplayName = (name: unknown): string => {
+  const cleaned = typeof name === 'string' ? name.replace(/[<>\u0000-\u001f]/g, '').trim().slice(0, 40) : '';
+  return cleaned || 'Viewer';
+};
+
 export const normalizeRole = (role: unknown): string => {
   const r = typeof role === 'string' ? role : 'viewer';
   return ROLE_ALIASES[r] || r;
@@ -86,6 +93,7 @@ export const authMiddleware = async (
     req.user = {
       userId: decodedToken.uid,
       id: decodedToken.uid,
+      displayName: sanitizeDisplayName(userData?.name),
       email: decodedToken.email || '',
       role: normalizeRole(userData?.role),
       type: 'access',
@@ -153,6 +161,7 @@ export const optionalAuth = async (
           req.user = {
             userId: decodedToken.uid,
             id: decodedToken.uid,
+            displayName: sanitizeDisplayName(userData?.name),
             email: decodedToken.email || '',
             role: normalizeRole(userData?.role),
             type: 'access',
@@ -168,4 +177,35 @@ export const optionalAuth = async (
     // Ignore errors for optional auth
     next();
   }
+};
+
+/**
+ * Verify a Firebase ID token and load the active user (shared by HTTP and Socket.IO auth).
+ * Throws AppError(401/403/404) for invalid tokens and suspended/banned/unknown accounts.
+ */
+export const verifyUserFromToken = async (token: string): Promise<NonNullable<Express.Request['user']>> => {
+  const auth = getAuth();
+  const db = getFirestore();
+  if (!auth || !db) throw new AppError('Authentication unavailable', 500);
+  let decoded;
+  try {
+    decoded = await auth.verifyIdToken(token);
+  } catch {
+    throw new AppError('Invalid token', 401);
+  }
+  const userDoc = await db.collection('users').doc(decoded.uid).get();
+  if (!userDoc.exists) throw new AppError('User not found', 404);
+  const data = userDoc.data();
+  if (data?.status === 'suspended') throw new AppError('Account suspended', 403);
+  if (data?.status === 'banned') throw new AppError('Account banned', 403);
+  return {
+    userId: decoded.uid,
+    id: decoded.uid,
+    displayName: sanitizeDisplayName(data?.name),
+    email: decoded.email || '',
+    role: normalizeRole(data?.role),
+    type: 'access',
+    iat: decoded.iat || 0,
+    exp: decoded.exp || 0,
+  };
 };

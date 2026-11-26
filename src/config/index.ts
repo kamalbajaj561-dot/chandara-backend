@@ -161,7 +161,7 @@ const config: Config = {
     filePath: process.env.LOG_FILE_PATH || 'logs',
   },
   socket: {
-    corsOrigin: process.env.SOCKET_CORS_ORIGIN || 'http://localhost:3000',
+    corsOrigin: process.env.SOCKET_CORS_ORIGIN || process.env.CORS_ORIGIN || 'http://localhost:5173',
   },
   security: {
     csp: {

@@ -5,6 +5,7 @@ import { ReactionService } from '../services/reaction.service';
 import { SpamDetectionService } from '../services/spamDetection.service';
 import { TypingService } from '../services/typing.service';
 import { ChatReplayService } from '../services/chatReplay.service';
+import { emitToChatRoom, removeUserFromChatRoom } from '../sockets/emit';
 
 export class ChatController {
   private chatService: ChatService;
@@ -88,6 +89,8 @@ export class ChatController {
         replyTo
       );
 
+      emitToChatRoom(eventId, 'new-message', newMessage);
+
       res.status(201).json({
         success: true,
         data: newMessage,
@@ -113,6 +116,8 @@ export class ChatController {
 
       const editedMessage = await this.chatService.editMessage(id, user.id, message);
 
+      emitToChatRoom((editedMessage as any)?.eventId, 'message-updated', editedMessage);
+
       res.status(200).json({
         success: true,
         data: editedMessage,
@@ -136,6 +141,8 @@ export class ChatController {
       }
 
       const deletedMessage = await this.chatService.deleteMessage(id, user.id, user.role);
+
+      emitToChatRoom((deletedMessage as any)?.eventId, 'message-removed', { messageId: id });
 
       res.status(200).json({
         success: true,
@@ -166,6 +173,8 @@ export class ChatController {
         user.displayName || user.username,
         emoji
       );
+
+      emitToChatRoom((message as any)?.eventId, 'message-pin-changed', { messageId: id, pinned: Boolean((message as any)?.isPinned) });
 
       res.status(200).json({
         success: true,
@@ -276,6 +285,7 @@ export class ChatController {
         moderator.role
       );
 
+      emitToChatRoom(eventId, 'user-mute-changed', { userId, muted: true });
       res.status(200).json({
         success: true,
         message: 'User muted successfully',
@@ -299,6 +309,7 @@ export class ChatController {
 
       await this.moderationService.unmuteUser(eventId, userId, moderator.id, moderator.role);
 
+      emitToChatRoom(eventId, 'user-mute-changed', { userId, muted: false });
       res.status(200).json({
         success: true,
         message: 'User unmuted successfully',
@@ -331,6 +342,7 @@ export class ChatController {
         moderator.role
       );
 
+      emitToChatRoom(eventId, 'user-timed-out', { userId, duration });
       res.status(200).json({
         success: true,
         data: ban,
@@ -363,6 +375,8 @@ export class ChatController {
         moderator.role
       );
 
+      emitToChatRoom(eventId, 'user-ban-changed', { userId, banned: true });
+      await removeUserFromChatRoom(eventId, userId);
       res.status(200).json({
         success: true,
         data: ban,
@@ -387,6 +401,7 @@ export class ChatController {
 
       await this.moderationService.unbanUser(eventId, userId, moderator.id, moderator.role);
 
+      emitToChatRoom(eventId, 'user-ban-changed', { userId, banned: false });
       res.status(200).json({
         success: true,
         message: 'User unbanned successfully',
