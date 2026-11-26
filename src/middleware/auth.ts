@@ -152,7 +152,7 @@ export const optionalAuth = async (
         if (userData?.status !== 'suspended' && userData?.status !== 'banned') {
           req.user = {
             userId: decodedToken.uid,
-      id: decodedToken.uid,
+            id: decodedToken.uid,
             email: decodedToken.email || '',
             role: normalizeRole(userData?.role),
             type: 'access',

@@ -70,11 +70,21 @@ export async function authorizeLiveKitAccess(
     return;
   }
 
-  if (isOwner) return;
+  await assertCanViewEvent(user, event, deps);
+}
+
+/** Viewer rules shared by LiveKit tokens and chat: owner/admin always; others need a public event and, if paid, a valid ticket. */
+export async function assertCanViewEvent(
+  user: LiveKitAccessUser | undefined,
+  event: Event,
+  deps: LiveKitAccessDeps = defaultDeps
+): Promise<void> {
+  if (user && (user.role === 'administrator' || user.role === 'admin' || getEventOwnerId(event) === user.userId)) return;
   if (NON_PUBLIC_EVENT_STATUSES.includes(event.status as string)) {
     throw new AppError('This event is not available', 403);
   }
   if (event.ticketPrice > 0) {
+    if (!user) throw new AppError('Sign in and buy a ticket to access this event', 401);
     const tickets = await deps.findUserTickets(user.userId);
     const hasTicket = tickets.some(
       (t) => t.eventId === event.id && (t.status === 'active' || t.status === 'used')

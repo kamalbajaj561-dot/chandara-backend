@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { chatController } from '../controllers/chat.controller';
-import { authMiddleware, requireRole } from '../middleware/auth';
+import { authMiddleware, optionalAuth, requireRole } from '../middleware/auth';
+import { requireEventAccess } from '../middleware/eventAccess';
 import { fromBody } from '../middleware/validate';
 import {
   validateSendMessage,
@@ -25,22 +26,22 @@ import {
 const router = Router();
 
 // Public routes
-router.get('/:eventId/messages', chatController.getMessages.bind(chatController));
+router.get('/:eventId/messages', optionalAuth, requireEventAccess(), chatController.getMessages.bind(chatController));
 router.get('/:eventId/room', chatController.getChatRoom.bind(chatController));
-router.get('/:eventId/pinned', chatController.getPinnedMessages.bind(chatController));
-router.get('/:eventId/typing', chatController.getTypingUsers.bind(chatController));
-router.get('/:eventId/search', chatController.searchMessages.bind(chatController));
-router.get('/:eventId/pagination', chatController.getPaginatedMessages.bind(chatController));
+router.get('/:eventId/pinned', optionalAuth, requireEventAccess(), chatController.getPinnedMessages.bind(chatController));
+router.get('/:eventId/typing', optionalAuth, requireEventAccess(), chatController.getTypingUsers.bind(chatController));
+router.get('/:eventId/search', optionalAuth, requireEventAccess(), chatController.searchMessages.bind(chatController));
+router.get('/:eventId/pagination', optionalAuth, requireEventAccess(), chatController.getPaginatedMessages.bind(chatController));
 
 // Protected routes - authenticated users
-router.post('/:eventId/messages', authMiddleware, fromBody(validateSendMessage), chatController.sendMessage.bind(chatController));
+router.post('/:eventId/messages', authMiddleware, requireEventAccess(), fromBody(validateSendMessage), chatController.sendMessage.bind(chatController));
 router.put('/messages/:id', authMiddleware, fromBody(validateEditMessage), chatController.editMessage.bind(chatController));
 router.delete('/messages/:id', authMiddleware, chatController.deleteMessage.bind(chatController));
 router.post('/messages/:id/reaction', authMiddleware, fromBody(validateAddReaction), chatController.addReaction.bind(chatController));
 router.delete('/messages/:id/reaction', authMiddleware, fromBody(validateRemoveReaction), chatController.removeReaction.bind(chatController));
 router.post('/messages/:id/pin', authMiddleware, chatController.pinMessage.bind(chatController));
 router.post('/report', authMiddleware, fromBody(validateReportMessage), chatController.reportMessage.bind(chatController));
-router.post('/:eventId/typing', authMiddleware, fromBody(validateTyping), chatController.setTyping.bind(chatController));
+router.post('/:eventId/typing', authMiddleware, requireEventAccess(), fromBody(validateTyping), chatController.setTyping.bind(chatController));
 router.delete('/:eventId/typing', authMiddleware, fromBody(validateTyping), chatController.clearTyping.bind(chatController));
 
 // Moderation routes - moderators and creators
