@@ -17,6 +17,7 @@ const wrap =
 
 router.get('/dashboard', wrap('getDashboard'));
 router.get('/health', wrap('getHealth'));
+router.get('/users', wrap('listUsers'));
 router.get('/users/search', wrap('searchUsers'));
 router.post('/users/:userId/suspend', wrap('suspendUser'));
 router.post('/users/:userId/ban', wrap('banUser'));
@@ -39,6 +40,7 @@ router.get('/audit', wrap('getAuditLogs'));
 router.get('/search', wrap('search'));
 router.post('/export', wrap('createExport'));
 router.get('/export/:id', wrap('getExportStatus'));
+router.get('/events', wrap('listEvents'));
 router.post('/events/:eventId/approve', wrap('approveEvent'));
 router.post('/events/:eventId/reject', wrap('rejectEvent'));
 router.post('/events/:eventId/feature', wrap('featureEvent'));

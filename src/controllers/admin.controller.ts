@@ -7,6 +7,8 @@ import { maintenanceRepository } from '../repositories/maintenance.repository';
 import { featureFlagRepository } from '../repositories/featureFlag.repository';
 import { systemSettingsRepository } from '../repositories/systemSettings.repository';
 import { auditRepository } from '../repositories/audit.repository';
+import { UserRepository } from '../repositories/user.repository';
+import { eventRepository } from '../repositories/event.repository';
 import logger from '../utils/logger';
 
 /**
@@ -64,6 +66,52 @@ export class AdminController {
     } catch (error) {
       logger.error('Error searching users:', error);
       res.status(500).json({ error: 'Failed to search users' });
+    }
+  }
+
+  /**
+   * List users (paginated)
+   * GET /admin/users?page=&pageSize=&status=&role=
+   */
+  async listUsers(req: Request, res: Response): Promise<void> {
+    try {
+      const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
+      const pageSize = Math.min(100, Math.max(1, parseInt(String(req.query.pageSize ?? '20'), 10) || 20));
+      const status = typeof req.query.status === 'string' && req.query.status ? (req.query.status as any) : undefined;
+      const role = typeof req.query.role === 'string' && req.query.role ? (req.query.role as any) : undefined;
+
+      const { users, total } = await UserRepository.listUsers({
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
+        status,
+        role,
+      });
+      res.json({ users, total, page, pageSize });
+    } catch (error) {
+      logger.error('Error listing users:', error);
+      res.status(500).json({ error: 'Failed to list users' });
+    }
+  }
+
+  /**
+   * List events for moderation (paginated)
+   * GET /admin/events?page=&pageSize=&status=
+   */
+  async listEvents(req: Request, res: Response): Promise<void> {
+    try {
+      const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
+      const pageSize = Math.min(100, Math.max(1, parseInt(String(req.query.pageSize ?? '20'), 10) || 20));
+      const status = typeof req.query.status === 'string' && req.query.status ? req.query.status : undefined;
+
+      const { events, total } = await eventRepository.listEvents({
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
+        status,
+      });
+      res.json({ events, total, page, pageSize });
+    } catch (error) {
+      logger.error('Error listing events:', error);
+      res.status(500).json({ error: 'Failed to list events' });
     }
   }
 

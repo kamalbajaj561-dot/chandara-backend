@@ -38,6 +38,8 @@ app.use(errorHandler);
 // Sensitive, representative endpoints across every admin area.
 const endpoints: Array<[string, string]> = [
   ['get', '/admin/dashboard'],
+  ['get', '/admin/users'],
+  ['get', '/admin/events'],
   ['get', '/admin/users/search'],
   ['post', '/admin/users/u1/ban'],
   ['post', '/admin/users/u1/role'],

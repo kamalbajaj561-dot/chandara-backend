@@ -145,7 +145,7 @@ export class UserRepository {
       query = query.orderBy('createdAt', 'desc').limit(limit);
 
       if (offset > 0) {
-        query = query.startAfter(offset);
+        query = query.offset(offset);
       }
 
       const snapshot = await query.get();
