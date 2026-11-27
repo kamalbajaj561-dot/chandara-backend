@@ -1,13 +1,11 @@
+import { getFirestore } from '../firebase';
 import { adminDashboardService } from '../adminDashboard.service';
-import { platformAnalyticsRepository } from '../../repositories/platformAnalytics.repository';
-import { revenueAnalyticsRepository } from '../../repositories/revenueAnalytics.repository';
 import { getCache, deleteCache } from '../redis';
 
 // Mock dependencies
-jest.mock('../../repositories/platformAnalytics.repository');
-jest.mock('../../repositories/revenueAnalytics.repository');
 jest.mock('../../repositories/audit.repository');
 jest.mock('../redis');
+jest.mock('../firebase', () => ({ getFirestore: jest.fn() }));
 
 describe('AdminDashboardService', () => {
   beforeEach(() => {
@@ -52,33 +50,61 @@ describe('AdminDashboardService', () => {
   });
 
   describe('getDashboardSummary', () => {
-    it('should return dashboard summary with platform stats', async () => {
-      const mockPlatformStats = {
-        totalUsers: 1000,
-        activeUsers: 500,
-        totalCreators: 100,
-        activeCreators: 50,
-        totalEvents: 200,
-        activeEvents: 10,
-        totalTicketsSold: 1000,
-        monthlyTickets: 200,
-        totalRevenue: 50000,
-      };
+    const makeDb = (counts: Record<string, number>, opts: { failCollection?: string; revenue?: number } = {}) => ({
+      collection: (name: string) => {
+        const filters: any[] = [];
+        const q: any = {
+          where: (...f: any[]) => { filters.push(f); return q; },
+          count: () => ({
+            get: async () => {
+              if (opts.failCollection === name) throw new Error('index required');
+              const key = filters.map((f) => `${f[0]}${f[1]}${JSON.stringify(f[2])}`).join('&');
+              return { data: () => ({ count: counts[`${name}|${key}`] ?? counts[name] ?? 0 }) };
+            },
+          }),
+          aggregate: () => ({
+            get: async () => {
+              if (opts.failCollection === name) throw new Error('index required');
+              return { data: () => ({ total: opts.revenue ?? 0 }) };
+            },
+          }),
+        };
+        return q;
+      },
+    });
 
-      const mockRevenueStats = {
-        totalGrossRevenue: 10000,
-      };
-
-      (platformAnalyticsRepository.getLatest as jest.Mock).mockResolvedValue(mockPlatformStats);
-      (revenueAnalyticsRepository.getStatistics as jest.Mock).mockResolvedValue(mockRevenueStats);
+    it('returns real counts from Firestore aggregation queries', async () => {
+      (getFirestore as jest.Mock).mockReturnValue(makeDb({
+        users: 1000,
+        'users|status=="active"': 500,
+        events: 200,
+        'events|status=="live"': 10,
+        'events|status=="pending"': 4,
+        tickets: 321,
+        chat_messages: 77,
+      }, { revenue: 12345 }));
 
       const summary = await adminDashboardService.getDashboardSummary();
 
-      expect(summary).toBeDefined();
       expect(summary.totalUsers).toBe(1000);
       expect(summary.activeUsers).toBe(500);
-      expect(summary.totalRevenue).toBe(50000);
-      expect(summary.monthlyRevenue).toBe(10000);
+      expect(summary.totalEvents).toBe(200);
+      expect(summary.liveEvents).toBe(10);
+      expect(summary.pendingEvents).toBe(4);
+      expect(summary.totalTickets).toBe(321);
+      expect(summary.totalMessages).toBe(77);
+      expect(summary.totalRevenue).toBe(12345);
+    });
+
+    it('reports an unavailable metric as null instead of a fabricated 0', async () => {
+      (getFirestore as jest.Mock).mockReturnValue(makeDb({ users: 5 }, { failCollection: 'orders' }));
+
+      const summary = await adminDashboardService.getDashboardSummary();
+
+      expect(summary.totalUsers).toBe(5);
+      expect(summary.totalRevenue).toBeNull();
+      expect(summary.monthlyRevenue).toBeNull();
+      expect(summary.pendingVerifications).toBeNull(); // no data source exists
     });
   });
 

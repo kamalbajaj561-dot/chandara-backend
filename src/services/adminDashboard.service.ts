@@ -1,5 +1,5 @@
-import { platformAnalyticsRepository } from '../repositories/platformAnalytics.repository';
-import { revenueAnalyticsRepository } from '../repositories/revenueAnalytics.repository';
+import { getFirestore } from './firebase';
+import { AggregateField } from 'firebase-admin/firestore';
 import { auditRepository } from '../repositories/audit.repository';
 import { UserRepository } from '../repositories/user.repository';
 import { schedulerService } from './scheduler.service';
@@ -78,51 +78,62 @@ export class AdminDashboardService {
    * Get dashboard summary
    */
   async getDashboardSummary(): Promise<DashboardSummary> {
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const db = getFirestore();
 
-    const [platformStats, revenueStats] = await Promise.all([
-      platformAnalyticsRepository.getLatest(),
-      revenueAnalyticsRepository.getStatistics(monthStart, now),
+    // Real Firestore aggregation queries (no document scans). A failed metric is null, never a made-up 0.
+    const count = async (collection: string, filters: Array<[string, any, any]> = []): Promise<number | null> => {
+      try {
+        if (!db) return null;
+        let q: any = db.collection(collection);
+        for (const [field, op, value] of filters) q = q.where(field, op, value);
+        return (await q.count().get()).data().count;
+      } catch (error) {
+        logger.warn(`Dashboard metric unavailable (${collection} count): ${(error as Error).message}`);
+        return null;
+      }
+    };
+    const sumPaidOrders = async (since?: Date): Promise<number | null> => {
+      try {
+        if (!db) return null;
+        let q: any = db.collection('orders').where('status', '==', 'paid');
+        if (since) q = q.where('createdAt', '>=', since);
+        const snap = await q.aggregate({ total: AggregateField.sum('total') }).get();
+        return snap.data().total ?? 0;
+      } catch (error) {
+        logger.warn(`Dashboard metric unavailable (revenue): ${(error as Error).message}`);
+        return null;
+      }
+    };
+
+    const [
+      totalUsers, activeUsers, totalCreators, activeCreators, totalEvents, liveEvents, pendingEvents,
+      totalRevenue, monthlyRevenue, totalTickets, monthlyTickets, totalStreams, activeStreams,
+      totalMessages, pendingReports, systemStatus,
+    ] = await Promise.all([
+      count('users'),
+      count('users', [['status', '==', 'active']]),
+      count('users', [['role', 'in', ['creator', 'streamer']]]),
+      count('users', [['role', 'in', ['creator', 'streamer']], ['status', '==', 'active']]),
+      count('events'),
+      count('events', [['status', '==', 'live']]),
+      count('events', [['status', '==', 'pending']]),
+      sumPaidOrders(),
+      sumPaidOrders(monthStart),
+      count('tickets'),
+      count('tickets', [['createdAt', '>=', monthStart]]),
+      count('streams'),
+      count('streams', [['status', '==', 'live']]),
+      count('chat_messages'),
+      count('chat_reports', [['status', '==', 'pending']]),
+      this.determineSystemStatus(),
     ]);
 
-    const totalRevenue = platformStats?.totalRevenue || 0;
-    const monthlyRevenue = revenueStats?.totalGrossRevenue || 0;
-
-    // Placeholder values for repositories that need count methods
-    const totalUsers = platformStats?.totalUsers || 0;
-    const activeUsers = platformStats?.activeUsers || 0;
-    const totalCreators = platformStats?.totalCreators || 0;
-    const activeCreators = platformStats?.activeCreators || 0;
-    const totalEvents = platformStats?.totalEvents || 0;
-    const liveEvents = platformStats?.activeEvents || 0;
-    const totalTickets = platformStats?.totalTicketsSold || 0;
-    const monthlyTickets = 0; // Placeholder
-    const totalStreams = 0; // Placeholder
-    const activeStreams = 0; // Placeholder
-    const totalMessages = 0; // Placeholder
-    const pendingReports = 0; // Placeholder
-    const pendingVerifications = 0; // Placeholder
-
-    // Determine system status based on health checks
-    const systemStatus = await this.determineSystemStatus();
-
     return {
-      totalUsers,
-      activeUsers,
-      totalCreators,
-      activeCreators,
-      totalEvents,
-      liveEvents,
-      totalRevenue,
-      monthlyRevenue,
-      totalTickets,
-      monthlyTickets,
-      totalStreams,
-      activeStreams,
-      totalMessages,
-      pendingReports,
-      pendingVerifications,
+      totalUsers, activeUsers, totalCreators, activeCreators, totalEvents, liveEvents, pendingEvents,
+      totalRevenue, monthlyRevenue, totalTickets, monthlyTickets, totalStreams, activeStreams,
+      totalMessages, pendingReports,
+      pendingVerifications: null, // no verification queue exists yet
       systemStatus,
     };
   }
@@ -246,7 +257,7 @@ export class AdminDashboardService {
     }
 
     // Check for high pending reports
-    if (summary.pendingReports > 50) {
+    if ((summary.pendingReports ?? 0) > 50) {
       alerts.push({
         id: 'alert_high_reports',
         type: 'warning',
@@ -259,7 +270,7 @@ export class AdminDashboardService {
     }
 
     // Check for pending verifications
-    if (summary.pendingVerifications > 20) {
+    if ((summary.pendingVerifications ?? 0) > 20) {
       alerts.push({
         id: 'alert_pending_verifications',
         type: 'info',

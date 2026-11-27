@@ -793,22 +793,24 @@ export interface AdminDashboard {
   alerts: AdminAlert[];
 }
 
+/** A metric is `null` when it could not be computed (never a fabricated 0). */
 export interface DashboardSummary {
-  totalUsers: number;
-  activeUsers: number;
-  totalCreators: number;
-  activeCreators: number;
-  totalEvents: number;
-  liveEvents: number;
-  totalRevenue: number;
-  monthlyRevenue: number;
-  totalTickets: number;
-  monthlyTickets: number;
-  totalStreams: number;
-  activeStreams: number;
-  totalMessages: number;
-  pendingReports: number;
-  pendingVerifications: number;
+  totalUsers: number | null;
+  activeUsers: number | null;
+  totalCreators: number | null;
+  activeCreators: number | null;
+  totalEvents: number | null;
+  liveEvents: number | null;
+  pendingEvents: number | null;
+  totalRevenue: number | null;
+  monthlyRevenue: number | null;
+  totalTickets: number | null;
+  monthlyTickets: number | null;
+  totalStreams: number | null;
+  activeStreams: number | null;
+  totalMessages: number | null;
+  pendingReports: number | null;
+  pendingVerifications: number | null;
   systemStatus: 'healthy' | 'degraded' | 'critical';
 }
 
