@@ -17,6 +17,7 @@ interface CreateEventData {
   title: string;
   description: string;
   category: string;
+  sport?: string;
   tags?: string[];
   country: string;
   city: string;
@@ -117,7 +118,10 @@ export class EventService {
       country: eventData.country,
       city: eventData.city,
       venue: eventData.venue,
+      sport: eventData.sport,
       creatorUid,
+      // ownerId mirrors creatorUid: Firestore rules/clients use it for owner reads.
+      ownerId: creatorUid,
       creatorName,
       ticketPrice: eventData.ticketPrice,
       currency: eventData.currency,
@@ -134,7 +138,7 @@ export class EventService {
       capacity: eventData.capacity,
       language: eventData.language,
       ageRestriction: eventData.ageRestriction,
-      featured: eventData.featured || false,
+      featured: false, // only administrators can feature events
     };
 
     return await this.eventRepository.create(newEvent);

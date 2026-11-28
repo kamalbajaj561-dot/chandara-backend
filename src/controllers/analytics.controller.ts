@@ -6,6 +6,9 @@ import { AppError } from '../middleware/errorHandler';
  * Analytics Controller
  * Handles analytics API endpoints
  */
+/** The only event types the public /analytics/track endpoint accepts. */
+export const CLIENT_REPORTABLE_EVENT_TYPES = ['page_view', 'event_view'];
+
 export class AnalyticsController {
   /**
    * Get platform analytics
@@ -226,8 +229,16 @@ export class AnalyticsController {
       if (!eventType) {
         throw new AppError('Event type is required', 400);
       }
+      // Browsers may only report passive engagement. Purchases, payments, refunds and stream events are recorded
+      // by the server itself, so they can never be forged through this public endpoint.
+      if (!CLIENT_REPORTABLE_EVENT_TYPES.includes(eventType)) {
+        throw new AppError('This event type cannot be reported by clients', 400);
+      }
+      // Identity comes from the verified token, never from the request body.
+      const { userId: _u, creatorId: _c, ...rest } = (data || {}) as Record<string, any>;
+      const trusted = { ...rest, userId: (req.user as any)?.id };
 
-      const eventId = await analyticsService.trackEvent(eventType, data);
+      const eventId = await analyticsService.trackEvent(eventType, trusted);
 
       res.status(201).json({
         success: true,

@@ -351,6 +351,7 @@ export class EventRepository {
       title: data.title || '',
       description: data.description || '',
       category: data.category || '',
+      sport: data.sport || undefined,
       tags: data.tags || [],
       country: data.country || '',
       city: data.city || '',

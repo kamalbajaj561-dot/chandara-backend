@@ -1,29 +1,54 @@
 import Joi from 'joi';
 import { AppError } from '../middleware/errorHandler';
 
+/** Image URLs must be https and hosted on an approved storage host (prevents hotlinking arbitrary/tracking URLs). */
+const ALLOWED_IMAGE_HOSTS = (process.env.UPLOAD_ALLOWED_HOSTS || 'firebasestorage.googleapis.com,storage.googleapis.com')
+  .split(',')
+  .map((h) => h.trim().toLowerCase())
+  .filter(Boolean);
+
+export const imageUrl = () =>
+  Joi.string()
+    .uri({ scheme: ['https'] })
+    .max(2048)
+    .custom((value: string, helpers: any) => {
+      try {
+        const host = new URL(value).hostname.toLowerCase();
+        if (!ALLOWED_IMAGE_HOSTS.some((h) => host === h || host.endsWith('.' + h))) {
+          return helpers.error('any.invalid');
+        }
+      } catch {
+        return helpers.error('any.invalid');
+      }
+      return value;
+    }, 'approved image host')
+    .messages({ 'any.invalid': 'Image must be uploaded through Chandara storage' });
+
+const CAMERA_TYPES = ['4K', '1080p', '720p', 'mobile', '180vr', '360vr'];
+
 export const validateCreateEvent = (data: any) => {
   const schema = Joi.object({
     title: Joi.string().min(3).max(200).required(),
     description: Joi.string().min(10).max(5000).required(),
     category: Joi.string().valid('music', 'sports', 'gaming', 'education', 'entertainment', 'business', 'other').required(),
+    sport: Joi.string().max(50).optional(),
     tags: Joi.array().items(Joi.string().min(2).max(30)).max(10).optional(),
     country: Joi.string().length(2).uppercase().required(),
     city: Joi.string().min(2).max(100).required(),
     venue: Joi.string().max(200).optional(),
     ticketPrice: Joi.number().min(0).max(10000).required(),
     currency: Joi.string().length(3).uppercase().default('USD'),
-    cameraType: Joi.string().valid('4K', '1080p', '720p').required(),
+    cameraType: Joi.string().valid(...CAMERA_TYPES).required(),
     streamType: Joi.string().valid('live', 'vr', '360').required(),
     eventDate: Joi.date().iso().greater('now').required(),
     eventTime: Joi.string().pattern(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).required(),
     timezone: Joi.string().optional(),
     duration: Joi.number().min(15).max(480).optional(),
-    thumbnail: Joi.string().uri().optional(),
-    banner: Joi.string().uri().optional(),
+    thumbnail: imageUrl().optional(),
+    banner: imageUrl().optional(),
     capacity: Joi.number().min(1).max(1000000).required(),
     language: Joi.string().length(2).optional(),
     ageRestriction: Joi.number().min(0).max(21).optional(),
-    featured: Joi.boolean().default(false),
   });
 
   const { error, value } = schema.validate(data);
@@ -48,20 +73,21 @@ export const validateUpdateEvent = (data: any) => {
     title: Joi.string().min(3).max(200).optional(),
     description: Joi.string().min(10).max(5000).optional(),
     category: Joi.string().valid('music', 'sports', 'gaming', 'education', 'entertainment', 'business', 'other').optional(),
+    sport: Joi.string().max(50).optional(),
     tags: Joi.array().items(Joi.string().min(2).max(30)).max(10).optional(),
     country: Joi.string().length(2).uppercase().optional(),
     city: Joi.string().min(2).max(100).optional(),
     venue: Joi.string().max(200).optional(),
     ticketPrice: Joi.number().min(0).max(10000).optional(),
     currency: Joi.string().length(3).uppercase().optional(),
-    cameraType: Joi.string().valid('4K', '1080p', '720p').optional(),
+    cameraType: Joi.string().valid(...CAMERA_TYPES).optional(),
     streamType: Joi.string().valid('live', 'vr', '360').optional(),
     eventDate: Joi.date().iso().greater('now').optional(),
     eventTime: Joi.string().pattern(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(),
     timezone: Joi.string().optional(),
     duration: Joi.number().min(15).max(480).optional(),
-    thumbnail: Joi.string().uri().optional(),
-    banner: Joi.string().uri().optional(),
+    thumbnail: imageUrl().optional(),
+    banner: imageUrl().optional(),
     capacity: Joi.number().min(1).max(1000000).optional(),
     language: Joi.string().length(2).optional(),
     ageRestriction: Joi.number().min(0).max(21).optional(),

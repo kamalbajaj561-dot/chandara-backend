@@ -358,7 +358,7 @@ describe('AnalyticsController', () => {
   describe('trackEvent', () => {
     it('should track an event', async () => {
       const eventData = {
-        eventType: 'test_event',
+        eventType: 'page_view',
         data: { test: 'data' },
       };
 
@@ -377,9 +377,24 @@ describe('AnalyticsController', () => {
       });
     });
 
+    it('rejects server-only event types and never trusts client-supplied identity', async () => {
+      const analyticsService = require('../../services/analytics.service').analyticsService;
+      (analyticsService as any).trackEvent = jest.fn().mockResolvedValue('event-123');
+
+      mockReq.body = { eventType: 'payment_completed', data: { amount: 99999 } };
+      await controller.trackEvent(mockReq as Request, mockRes as Response, mockNext);
+      expect(mockNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
+      expect((analyticsService as any).trackEvent).not.toHaveBeenCalled();
+
+      mockReq.body = { eventType: 'page_view', data: { userId: 'victim', creatorId: 'victim-creator', path: '/x' } };
+      (mockReq as any).user = { id: 'real-user' };
+      await controller.trackEvent(mockReq as Request, mockRes as Response, mockNext);
+      expect((analyticsService as any).trackEvent).toHaveBeenCalledWith('page_view', { path: '/x', userId: 'real-user' });
+    });
+
     it('should handle tracking errors', async () => {
       const eventData = {
-        eventType: 'test_event',
+        eventType: 'page_view',
         data: { test: 'data' },
       };
 

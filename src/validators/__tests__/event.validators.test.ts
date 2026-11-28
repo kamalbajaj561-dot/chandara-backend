@@ -29,7 +29,7 @@ describe('Event Validators', () => {
       const result = validateCreateEvent(validData);
 
       // Joi converts the ISO date string to a Date
-      expect(result).toEqual({ ...validData, eventDate: new Date(validData.eventDate), featured: false });
+      expect(result).toEqual({ ...validData, eventDate: new Date(validData.eventDate) });
     });
 
     it('should throw error for missing required fields', () => {
@@ -133,17 +133,37 @@ describe('Event Validators', () => {
         capacity: 1000,
         tags: ['music', 'live'],
         venue: 'Test Venue',
-        thumbnail: 'https://example.com/thumb.jpg',
-        banner: 'https://example.com/banner.jpg',
+        thumbnail: 'https://firebasestorage.googleapis.com/v0/b/app/o/thumb.jpg',
+        banner: 'https://firebasestorage.googleapis.com/v0/b/app/o/banner.jpg',
         language: 'en',
         ageRestriction: 18,
-        featured: true,
       };
 
       const result = validateCreateEvent(validData);
 
       // Joi converts the ISO date string to a Date
       expect(result).toEqual({ ...validData, eventDate: new Date(validData.eventDate) });
+    });
+  });
+
+  describe('creator-supplied fields that must be rejected', () => {
+    const base = {
+      title: 'Test Event', description: 'A valid description for the event', category: 'sports', country: 'US', city: 'New York',
+      ticketPrice: 10, currency: 'USD', cameraType: '4K', streamType: 'live', eventDate: '2099-12-31', eventTime: '20:00', capacity: 100,
+    };
+    it('does not let a creator self-feature an event', () => {
+      expect(() => validateCreateEvent({ ...base, featured: true })).toThrow('Validation failed');
+    });
+    it('only accepts images hosted on approved storage hosts over https', () => {
+      expect(() => validateCreateEvent({ ...base, thumbnail: 'https://example.com/x.jpg' })).toThrow('Validation failed');
+      expect(() => validateCreateEvent({ ...base, thumbnail: 'http://firebasestorage.googleapis.com/x.jpg' })).toThrow('Validation failed');
+      expect(() => validateCreateEvent({ ...base, banner: 'https://evilfirebasestorage.googleapis.com.attacker.io/x.jpg' })).toThrow('Validation failed');
+      expect(() => validateCreateEvent({ ...base, thumbnail: 'https://firebasestorage.googleapis.com/v0/b/a/o/x.jpg' })).not.toThrow();
+    });
+    it('accepts the camera types used by the web client', () => {
+      for (const cameraType of ['mobile', '180vr', '360vr']) {
+        expect(() => validateCreateEvent({ ...base, cameraType })).not.toThrow();
+      }
     });
   });
 

@@ -66,11 +66,14 @@ export interface Event {
   title: string;
   description: string;
   category: string;
+  sport?: string;
   tags?: string[];
   country: string;
   city: string;
   venue?: string;
   creatorUid: string;
+  /** Mirror of creatorUid kept for Firestore rules and legacy clients. */
+  ownerId?: string;
   creatorName: string;
   ticketPrice: number;
   currency: string;
