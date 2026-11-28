@@ -20,6 +20,7 @@ describe('EventService', () => {
         id: 'event-id',
         slug: 'test-event',
         title: 'Test Event',
+        status: 'scheduled',
       };
 
       mockEventRepository.findById.mockResolvedValue(mockEvent as any);
@@ -44,6 +45,7 @@ describe('EventService', () => {
         id: 'event-id',
         slug: 'test-event',
         title: 'Test Event',
+        status: 'scheduled',
       };
 
       mockEventRepository.findBySlug.mockResolvedValue(mockEvent as any);
@@ -229,8 +231,8 @@ describe('EventService', () => {
     });
   });
 
-  describe('scheduleEvent', () => {
-    it('should schedule an event', async () => {
+  describe('submitEvent / scheduleEvent (submit for review)', () => {
+    it('should submit a draft event for review (draft -> pending)', async () => {
       const existingEvent = {
         id: 'event-id',
         creatorUid: 'creator-id',
@@ -241,17 +243,30 @@ describe('EventService', () => {
 
       const updatedEvent = {
         ...existingEvent,
-        status: 'scheduled',
-        scheduledAt: new Date(),
+        status: 'pending',
       };
 
       mockEventRepository.findById.mockResolvedValue(existingEvent as any);
       mockEventRepository.updateStatus.mockResolvedValue(updatedEvent as any);
 
-      const result = await eventService.scheduleEvent('event-id', 'creator-id');
+      const result = await eventService.submitEvent('event-id', 'creator-id');
 
-      expect(mockEventRepository.updateStatus).toHaveBeenCalledWith('event-id', 'scheduled');
+      expect(mockEventRepository.updateStatus).toHaveBeenCalledWith('event-id', 'pending');
       expect(result).toEqual(updatedEvent);
+    });
+
+    it('legacy scheduleEvent behaves like submitEvent', async () => {
+      mockEventRepository.findById.mockResolvedValue({ id: 'event-id', creatorUid: 'creator-id', status: 'rejected', eventDate: '2027-12-31', eventTime: '20:00' } as any);
+      mockEventRepository.updateStatus.mockResolvedValue({ id: 'event-id', status: 'pending' } as any);
+      await eventService.scheduleEvent('event-id', 'creator-id');
+      expect(mockEventRepository.updateStatus).toHaveBeenCalledWith('event-id', 'pending');
+    });
+
+    it('cannot submit an event that is already scheduled or pending', async () => {
+      for (const status of ['pending', 'scheduled', 'live', 'ended', 'cancelled']) {
+        mockEventRepository.findById.mockResolvedValue({ id: 'event-id', creatorUid: 'creator-id', status } as any);
+        await expect(eventService.submitEvent('event-id', 'creator-id')).rejects.toThrow('Only draft or rejected events can be submitted for review');
+      }
     });
 
     it('should throw error if not owner', async () => {
@@ -266,16 +281,9 @@ describe('EventService', () => {
       await expect(eventService.scheduleEvent('event-id', 'creator-id')).rejects.toThrow('permission');
     });
 
-    it('should throw error if not draft', async () => {
-      const existingEvent = {
-        id: 'event-id',
-        creatorUid: 'creator-id',
-        status: 'scheduled',
-      };
-
-      mockEventRepository.findById.mockResolvedValue(existingEvent as any);
-
-      await expect(eventService.scheduleEvent('event-id', 'creator-id')).rejects.toThrow('Only draft events can be scheduled');
+    it('legacy "approved" status is treated as scheduled (cannot be resubmitted, can be started)', async () => {
+      mockEventRepository.findById.mockResolvedValue({ id: 'event-id', creatorUid: 'creator-id', status: 'approved' } as any);
+      await expect(eventService.submitEvent('event-id', 'creator-id')).rejects.toThrow('Only draft or rejected');
     });
   });
 
@@ -389,8 +397,8 @@ describe('EventService', () => {
   describe('searchEvents', () => {
     it('should search events', async () => {
       const mockEvents = [
-        { id: 'event-1', title: 'Test Event 1' },
-        { id: 'event-2', title: 'Test Event 2' },
+        { id: 'event-1', title: 'Test Event 1', status: 'scheduled' },
+        { id: 'event-2', title: 'Test Event 2', status: 'live' },
       ];
 
       mockEventRepository.searchEvents.mockResolvedValue(mockEvents as any);
@@ -429,7 +437,7 @@ describe('EventService', () => {
   describe('getEventsByTags', () => {
     it('should get events by tags', async () => {
       const mockEvents = [
-        { id: 'event-1', title: 'Test Event 1', tags: ['music'] },
+        { id: 'event-1', title: 'Test Event 1', tags: ['music'], status: 'scheduled' },
       ];
 
       mockEventRepository.getEventsByTags.mockResolvedValue(mockEvents as any);
@@ -500,7 +508,7 @@ describe('EventService', () => {
 
       const result = await eventService.getEventsByCreator('creator-id', { limit: 10, offset: 0 });
 
-      expect(mockEventRepository.getEventsByCreator).toHaveBeenCalledWith('creator-id', { limit: 10, offset: 0 });
+      expect(mockEventRepository.getEventsByCreator).toHaveBeenCalledWith('creator-id', { limit: 10, offset: 0, publicOnly: true });
       expect(result.events).toEqual(mockEvents);
       expect(result.total).toBe(1);
     });
@@ -531,6 +539,64 @@ describe('EventService', () => {
       mockEventRepository.findById.mockResolvedValue(null);
 
       await expect(eventService.setFeatured('event-id', true)).rejects.toThrow('Event not found');
+    });
+  });
+
+  describe('visibility of non-public events', () => {
+    const hidden = (status: string) => ({ id: 'event-id', slug: 'x', title: 'T', status, creatorUid: 'owner-1' });
+
+    it('hides draft/pending/rejected/cancelled events from anonymous and other users as 404', async () => {
+      for (const status of ['draft', 'pending', 'rejected', 'cancelled']) {
+        mockEventRepository.findById.mockResolvedValue(hidden(status) as any);
+        mockEventRepository.findBySlug.mockResolvedValue(hidden(status) as any);
+        await expect(eventService.getEvent('event-id')).rejects.toMatchObject({ statusCode: 404 });
+        await expect(eventService.getEvent('event-id', { id: 'someone-else', isAdmin: false })).rejects.toMatchObject({ statusCode: 404 });
+        await expect(eventService.getEventBySlug('x')).rejects.toMatchObject({ statusCode: 404 });
+      }
+    });
+
+    it('shows hidden events to the owner and to administrators', async () => {
+      mockEventRepository.findById.mockResolvedValue(hidden('pending') as any);
+      await expect(eventService.getEvent('event-id', { id: 'owner-1', isAdmin: false })).resolves.toBeTruthy();
+      await expect(eventService.getEvent('event-id', { id: 'admin-1', isAdmin: true })).resolves.toBeTruthy();
+    });
+
+    it('shows legacy "approved" events publicly', async () => {
+      mockEventRepository.findById.mockResolvedValue(hidden('approved') as any);
+      await expect(eventService.getEvent('event-id')).resolves.toBeTruthy();
+    });
+
+    it('lists only public events for anonymous callers and rejects non-public status filters', async () => {
+      mockEventRepository.listEvents.mockResolvedValue({ events: [], total: 0 } as any);
+      await eventService.listEvents({ limit: 10 });
+      expect(mockEventRepository.listEvents).toHaveBeenCalledWith({ limit: 10, publicOnly: true });
+      await expect(eventService.listEvents({ status: 'pending' })).rejects.toMatchObject({ statusCode: 403 });
+      await expect(eventService.listEvents({ status: 'draft' }, { id: 'u1', isAdmin: false })).rejects.toMatchObject({ statusCode: 403 });
+    });
+
+    it('lets an owner list their own events and an admin list any status', async () => {
+      mockEventRepository.listEvents.mockResolvedValue({ events: [], total: 0 } as any);
+      await eventService.listEvents({ creatorUid: 'u1', status: 'draft' }, { id: 'u1', isAdmin: false });
+      expect(mockEventRepository.listEvents).toHaveBeenLastCalledWith({ creatorUid: 'u1', status: 'draft' });
+      await eventService.listEvents({ status: 'pending' }, { id: 'a', isAdmin: true });
+      expect(mockEventRepository.listEvents).toHaveBeenLastCalledWith({ status: 'pending' });
+    });
+
+    it('filters non-public events out of search and tag results', async () => {
+      mockEventRepository.searchEvents.mockResolvedValue([{ id: '1', status: 'pending' }, { id: '2', status: 'live' }] as any);
+      expect((await eventService.searchEvents('test')).map((e: any) => e.id)).toEqual(['2']);
+      mockEventRepository.getEventsByTags.mockResolvedValue([{ id: '1', status: 'draft' }, { id: '2', status: 'approved' }] as any);
+      expect((await eventService.getEventsByTags(['music'])).map((e: any) => e.id)).toEqual(['2']);
+    });
+
+    it("only the creator or an admin gets non-public events from a creator's list", async () => {
+      mockEventRepository.getEventsByCreator.mockResolvedValue({ events: [], total: 0 } as any);
+      await eventService.getEventsByCreator('owner-1', {}, { id: 'owner-1', isAdmin: false });
+      expect(mockEventRepository.getEventsByCreator).toHaveBeenLastCalledWith('owner-1', { publicOnly: false });
+      await eventService.getEventsByCreator('owner-1', {}, { id: 'other', isAdmin: false });
+      expect(mockEventRepository.getEventsByCreator).toHaveBeenLastCalledWith('owner-1', { publicOnly: true });
+      await eventService.getEventsByCreator('owner-1', {});
+      expect(mockEventRepository.getEventsByCreator).toHaveBeenLastCalledWith('owner-1', { publicOnly: true });
     });
   });
 });

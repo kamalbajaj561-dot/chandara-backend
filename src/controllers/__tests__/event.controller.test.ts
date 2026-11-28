@@ -69,7 +69,7 @@ describe('EventController', () => {
 
       await eventController.getEvent(mockRequest as Request, mockResponse as Response, mockNext);
 
-      expect(mockEventService.getEvent).toHaveBeenCalledWith('event-id');
+      expect(mockEventService.getEvent).toHaveBeenCalledWith('event-id', { id: 'user-id', isAdmin: false });
       expect(mockResponse.status).toHaveBeenCalledWith(200);
       expect(mockResponse.json).toHaveBeenCalledWith({
         success: true,
@@ -100,7 +100,7 @@ describe('EventController', () => {
 
       await eventController.getEventBySlug(mockRequest as Request, mockResponse as Response, mockNext);
 
-      expect(mockEventService.getEventBySlug).toHaveBeenCalledWith('test-event');
+      expect(mockEventService.getEventBySlug).toHaveBeenCalledWith('test-event', { id: 'user-id', isAdmin: false });
       expect(mockResponse.status).toHaveBeenCalledWith(200);
       expect(mockResponse.json).toHaveBeenCalledWith({
         success: true,
@@ -422,7 +422,7 @@ describe('EventController', () => {
 
       await eventController.getEventsByCreator(mockRequest as Request, mockResponse as Response, mockNext);
 
-      expect(mockEventService.getEventsByCreator).toHaveBeenCalledWith('creator-id', { limit: 10, offset: 0 });
+      expect(mockEventService.getEventsByCreator).toHaveBeenCalledWith('creator-id', { limit: 10, offset: 0 }, { id: 'user-id', isAdmin: false });
       expect(mockResponse.status).toHaveBeenCalledWith(200);
       expect(mockResponse.json).toHaveBeenCalledWith({
         data: mockEvents,

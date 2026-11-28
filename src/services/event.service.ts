@@ -1,3 +1,14 @@
+import { getEventOwnerId } from '../utils/eventOwner';
+import { canTransition, isCreatorEditable, isPublicEventStatus, normalizeEventStatus } from '../utils/eventLifecycle';
+
+/** Who is asking (derived server-side from the verified token, never from the request body). */
+export interface EventViewer { id: string; isAdmin: boolean }
+
+export function canViewEvent(event: Event, viewer?: EventViewer): boolean {
+  if (isPublicEventStatus(event.status)) return true;
+  if (!viewer) return false;
+  return viewer.isAdmin || getEventOwnerId(event) === viewer.id;
+}
 import { EventRepository } from '../repositories/event.repository';
 import { Event } from '../types';
 import { AppError } from '../middleware/errorHandler';
@@ -58,17 +69,21 @@ export class EventService {
     this.eventRepository = eventRepository;
   }
 
-  async getEvent(id: string): Promise<Event> {
+  /**
+   * Public reads only see publicly visible events (scheduled/live/ended). The owner and administrators
+   * can also see draft/pending/rejected/cancelled events. Hidden events look exactly like missing ones (404).
+   */
+  async getEvent(id: string, viewer?: EventViewer): Promise<Event> {
     const event = await this.eventRepository.findById(id);
-    if (!event) {
+    if (!event || !canViewEvent(event, viewer)) {
       throw new AppError('Event not found', 404);
     }
     return event;
   }
 
-  async getEventBySlug(slug: string): Promise<Event> {
+  async getEventBySlug(slug: string, viewer?: EventViewer): Promise<Event> {
     const event = await this.eventRepository.findBySlug(slug);
-    if (!event) {
+    if (!event || !canViewEvent(event, viewer)) {
       throw new AppError('Event not found', 404);
     }
     return event;
@@ -113,6 +128,7 @@ export class EventService {
       timezone: eventData.timezone,
       duration: eventData.duration,
       status: 'draft',
+      scheduledAt: computeStart(eventData.eventDate, eventData.eventTime),
       thumbnail: eventData.thumbnail,
       banner: eventData.banner,
       capacity: eventData.capacity,
@@ -131,8 +147,12 @@ export class EventService {
     }
 
     // Check ownership
-    if (existingEvent.creatorUid !== creatorUid) {
+    if (getEventOwnerId(existingEvent) !== creatorUid) {
       throw new AppError('You do not have permission to update this event', 403);
+    }
+
+    if (!isCreatorEditable(existingEvent.status)) {
+      throw new AppError('This event can no longer be edited', 400);
     }
 
     // If updating date/time, validate and check for overlaps
@@ -158,6 +178,14 @@ export class EventService {
 
     // Only allow status updates through specific methods
     const { status, ...updateData } = eventData as any;
+    if (eventData.eventDate || eventData.eventTime) {
+      updateData.scheduledAt = computeStart(
+        eventData.eventDate || existingEvent.eventDate,
+        eventData.eventTime || existingEvent.eventTime
+      );
+    }
+    // An edited rejected event goes back to the creator's drafts-for-resubmission state unchanged;
+    // approved events keep their status (admins can re-review via cancel/reject if needed).
 
     const updatedEvent = await this.eventRepository.update(id, updateData);
     if (!updatedEvent) {
@@ -173,7 +201,7 @@ export class EventService {
     }
 
     // Check ownership
-    if (event.creatorUid !== creatorUid) {
+    if (getEventOwnerId(event) !== creatorUid) {
       throw new AppError('You do not have permission to delete this event', 403);
     }
 
@@ -188,30 +216,33 @@ export class EventService {
     }
   }
 
-  async scheduleEvent(id: string, creatorUid: string): Promise<Event> {
+  /**
+   * Creator submits an event for admin review: draft|rejected -> pending.
+   * (Exposed on POST /:id/submit and, for backwards compatibility, POST /:id/schedule.)
+   */
+  async submitEvent(id: string, creatorUid: string): Promise<Event> {
     const event = await this.eventRepository.findById(id);
     if (!event) {
       throw new AppError('Event not found', 404);
     }
-
-    // Check ownership
-    if (event.creatorUid !== creatorUid) {
-      throw new AppError('You do not have permission to schedule this event', 403);
+    if (getEventOwnerId(event) !== creatorUid) {
+      throw new AppError('You do not have permission to submit this event', 403);
     }
-
-    // Validate status transition
-    if (event.status !== 'draft') {
-      throw new AppError('Only draft events can be scheduled', 400);
+    if (!canTransition(event.status, 'pending')) {
+      throw new AppError('Only draft or rejected events can be submitted for review', 400);
     }
-
-    // Validate event date is in the future
     await this.validateEventDate(event.eventDate, event.eventTime);
 
-    const updatedEvent = await this.eventRepository.updateStatus(id, 'scheduled');
+    const updatedEvent = await this.eventRepository.updateStatus(id, 'pending');
     if (!updatedEvent) {
-      throw new AppError('Failed to schedule event', 500);
+      throw new AppError('Failed to submit event', 500);
     }
     return updatedEvent;
+  }
+
+  /** @deprecated kept so existing callers/routes keep working; identical to submitEvent. */
+  async scheduleEvent(id: string, creatorUid: string): Promise<Event> {
+    return this.submitEvent(id, creatorUid);
   }
 
   async startEvent(id: string, creatorUid: string): Promise<Event> {
@@ -221,12 +252,12 @@ export class EventService {
     }
 
     // Check ownership
-    if (event.creatorUid !== creatorUid) {
+    if (getEventOwnerId(event) !== creatorUid) {
       throw new AppError('You do not have permission to start this event', 403);
     }
 
     // Validate status transition
-    if (event.status !== 'scheduled') {
+    if (!canTransition(event.status, 'live')) {
       throw new AppError('Only scheduled events can be started', 400);
     }
 
@@ -244,12 +275,12 @@ export class EventService {
     }
 
     // Check ownership
-    if (event.creatorUid !== creatorUid) {
+    if (getEventOwnerId(event) !== creatorUid) {
       throw new AppError('You do not have permission to end this event', 403);
     }
 
     // Validate status transition
-    if (event.status !== 'live') {
+    if (!canTransition(event.status, 'ended')) {
       throw new AppError('Only live events can be ended', 400);
     }
 
@@ -267,13 +298,15 @@ export class EventService {
     }
 
     // Check ownership
-    if (event.creatorUid !== creatorUid) {
+    if (getEventOwnerId(event) !== creatorUid) {
       throw new AppError('You do not have permission to cancel this event', 403);
     }
 
-    // Prevent cancellation of live events
-    if (event.status === 'live') {
-      throw new AppError('Cannot cancel a live event', 400);
+    if (!canTransition(event.status, 'cancelled')) {
+      throw new AppError(
+        normalizeEventStatus(event.status) === 'live' ? 'Cannot cancel a live event' : 'This event can no longer be cancelled',
+        400
+      );
     }
 
     const updatedEvent = await this.eventRepository.updateStatus(id, 'cancelled');
@@ -288,7 +321,8 @@ export class EventService {
       throw new AppError('Search query must be at least 2 characters', 400);
     }
 
-    return await this.eventRepository.searchEvents(query, { limit });
+    const events = await this.eventRepository.searchEvents(query, { limit });
+    return events.filter((e) => isPublicEventStatus(e.status));
   }
 
   async listEvents(options: {
@@ -300,7 +334,14 @@ export class EventService {
     creatorUid?: string;
     language?: string;
     country?: string;
-  }): Promise<{ events: Event[]; total: number }> {
+  }, viewer?: EventViewer): Promise<{ events: Event[]; total: number }> {
+    const privileged = !!viewer && (viewer.isAdmin || (!!options.creatorUid && options.creatorUid === viewer.id));
+    if (!privileged) {
+      if (options.status && !isPublicEventStatus(options.status)) {
+        throw new AppError('You do not have permission to list events with this status', 403);
+      }
+      return await this.eventRepository.listEvents({ ...options, publicOnly: true });
+    }
     return await this.eventRepository.listEvents(options);
   }
 
@@ -309,7 +350,8 @@ export class EventService {
       throw new AppError('At least one tag is required', 400);
     }
 
-    return await this.eventRepository.getEventsByTags(tags, { limit });
+    const events = await this.eventRepository.getEventsByTags(tags, { limit });
+    return events.filter((e) => isPublicEventStatus(e.status));
   }
 
   async getFeaturedEvents(limit?: number): Promise<Event[]> {
@@ -324,8 +366,13 @@ export class EventService {
     return await this.eventRepository.getUpcomingEvents({ limit });
   }
 
-  async getEventsByCreator(creatorUid: string, options: { limit?: number; offset?: number }): Promise<{ events: Event[]; total: number }> {
-    return await this.eventRepository.getEventsByCreator(creatorUid, options);
+  async getEventsByCreator(
+    creatorUid: string,
+    options: { limit?: number; offset?: number },
+    viewer?: EventViewer
+  ): Promise<{ events: Event[]; total: number }> {
+    const privileged = !!viewer && (viewer.isAdmin || viewer.id === creatorUid);
+    return await this.eventRepository.getEventsByCreator(creatorUid, { ...options, publicOnly: !privileged });
   }
 
   async setFeatured(id: string, featured: boolean): Promise<Event> {
@@ -379,3 +426,15 @@ export class EventService {
 }
 
 export const eventService = new EventService();
+
+/** Planned start of an event as a Date (eventDate may be a date or full ISO string; eventTime is HH:mm). */
+export function computeStart(eventDate: unknown, eventTime: unknown): Date | undefined {
+  if (!eventDate) return undefined;
+  const d = new Date(eventDate as any);
+  if (isNaN(d.getTime())) return undefined;
+  const m = typeof eventTime === 'string' ? /^(\d{1,2}):(\d{2})$/.exec(eventTime) : null;
+  if (m) {
+    d.setUTCHours(parseInt(m[1], 10), parseInt(m[2], 10), 0, 0);
+  }
+  return d;
+}

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { eventController } from '../controllers/event.controller';
 import { reviewController } from '../controllers/review.controller';
-import { authMiddleware, requireRole } from '../middleware/auth';
+import { authMiddleware, optionalAuth, requireRole } from '../middleware/auth';
 import { validateCreateEvent, validateUpdateEvent, validateListEvents, validateSetFeatured } from '../validators/event.validators';
 import { fromBody, fromQuery } from '../middleware/validate';
 
@@ -13,10 +13,10 @@ router.get('/featured', eventController.getFeaturedEvents.bind(eventController))
 router.get('/live', eventController.getLiveEvents.bind(eventController));
 router.get('/upcoming', eventController.getUpcomingEvents.bind(eventController));
 router.get('/tags', eventController.getEventsByTags.bind(eventController));
-router.get('/creator/:creatorUid', eventController.getEventsByCreator.bind(eventController));
-router.get('/', fromQuery(validateListEvents), eventController.listEvents.bind(eventController));
-router.get('/slug/:slug', eventController.getEventBySlug.bind(eventController));
-router.get('/:id', eventController.getEvent.bind(eventController));
+router.get('/creator/:creatorUid', optionalAuth, eventController.getEventsByCreator.bind(eventController));
+router.get('/', optionalAuth, fromQuery(validateListEvents), eventController.listEvents.bind(eventController));
+router.get('/slug/:slug', optionalAuth, eventController.getEventBySlug.bind(eventController));
+router.get('/:id', optionalAuth, eventController.getEvent.bind(eventController));
 
 // Protected routes - require creator role
 router.post('/', authMiddleware, requireRole('creator'), fromBody(validateCreateEvent), eventController.createEvent.bind(eventController));
@@ -24,6 +24,7 @@ router.put('/:id', authMiddleware, requireRole('creator'), fromBody(validateUpda
 router.delete('/:id', authMiddleware, requireRole('creator'), eventController.deleteEvent.bind(eventController));
 
 // Event lifecycle management - creator only
+router.post('/:id/submit', authMiddleware, requireRole('creator'), eventController.submitEvent.bind(eventController));
 router.post('/:id/schedule', authMiddleware, requireRole('creator'), eventController.scheduleEvent.bind(eventController));
 router.post('/:id/start', authMiddleware, requireRole('creator'), eventController.startEvent.bind(eventController));
 router.post('/:id/end', authMiddleware, requireRole('creator'), eventController.endEvent.bind(eventController));

@@ -1,3 +1,4 @@
+import { canTransition, normalizeEventStatus } from '../utils/eventLifecycle';
 import { UserRepository } from '../repositories/user.repository';
 import { CreatorRepository } from '../repositories/creator.repository';
 import { EventRepository } from '../repositories/event.repository';
@@ -605,8 +606,11 @@ export class AdminService {
       throw new Error('Event not found');
     }
 
+    if (!canTransition(event.status, 'scheduled')) {
+      throw new Error(`Only pending events can be approved (current status: ${event.status})`);
+    }
     const before = { status: event.status };
-    await eventRepository.update(eventId, { status: 'scheduled' });
+    await eventRepository.update(eventId, { status: 'scheduled', rejectionReason: '' });
     const after = { status: 'scheduled' };
 
     await this.logAudit(
@@ -640,9 +644,12 @@ export class AdminService {
       throw new Error('Event not found');
     }
 
+    if (!canTransition(event.status, 'rejected')) {
+      throw new Error(`Only pending events can be rejected (current status: ${event.status})`);
+    }
     const before = { status: event.status };
-    await eventRepository.update(eventId, { status: 'cancelled' });
-    const after = { status: 'cancelled' };
+    await eventRepository.update(eventId, { status: 'rejected', rejectionReason: reason });
+    const after = { status: 'rejected', reason };
 
     await this.logAudit(
       adminId,
@@ -743,6 +750,9 @@ export class AdminService {
       throw new Error('Event not found');
     }
 
+    if (['ended', 'cancelled'].includes(normalizeEventStatus(event.status))) {
+      throw new Error(`Event is already ${normalizeEventStatus(event.status)}`);
+    }
     const before = { status: event.status };
     await eventRepository.update(eventId, { status: 'cancelled' });
     const after = { status: 'cancelled' };

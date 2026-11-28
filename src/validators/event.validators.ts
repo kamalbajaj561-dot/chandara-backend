@@ -111,7 +111,7 @@ export const validateListEvents = (data: any) => {
   const schema = Joi.object({
     limit: Joi.number().min(1).max(100).default(20),
     offset: Joi.number().min(0).default(0),
-    status: Joi.string().valid('draft', 'scheduled', 'live', 'ended', 'cancelled').optional(),
+    status: Joi.string().valid('draft', 'pending', 'scheduled', 'approved', 'live', 'ended', 'rejected', 'cancelled').optional(),
     category: Joi.string().valid('music', 'sports', 'gaming', 'education', 'entertainment', 'business', 'other').optional(),
     featured: Joi.boolean().optional(),
     creatorUid: Joi.string().optional(),

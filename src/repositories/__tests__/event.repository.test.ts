@@ -37,6 +37,7 @@ describe('EventRepository', () => {
       offset: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
       get: jest.fn(),
+      count: jest.fn().mockReturnValue({ get: jest.fn().mockResolvedValue({ data: () => ({ count: 1 }) }) }),
     };
 
     mockCollection = {
@@ -359,7 +360,7 @@ describe('EventRepository', () => {
         slug: 'test-event',
         title: 'Test Event',
         status: 'scheduled',
-        scheduledAt: mockTimestamp,
+        scheduledAt: { toDate: () => new Date(Date.now() + 86400000) },
       };
 
       mockDoc.data.mockReturnValue(mockEventData);
@@ -371,6 +372,16 @@ describe('EventRepository', () => {
       const result = await eventRepository.getUpcomingEvents({ limit: 10 });
 
       expect(result).toHaveLength(1);
+    });
+
+    it('excludes upcoming events whose planned start has passed, keeps legacy ones without a date', async () => {
+      const past = { ...mockDoc, id: 'past', data: () => ({ slug: 'p', title: 'Past', status: 'approved', scheduledAt: { toDate: () => new Date(Date.now() - 86400000) } }) };
+      const legacy = { ...mockDoc, id: 'legacy', data: () => ({ slug: 'l', title: 'Legacy', status: 'approved' }) };
+      mockQuery.get.mockResolvedValue({ empty: false, docs: [past, legacy] });
+
+      const result = await eventRepository.getUpcomingEvents({ limit: 10 });
+
+      expect(result.map((e) => e.title)).toEqual(['Legacy']);
     });
   });
 

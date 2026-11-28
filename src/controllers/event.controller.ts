@@ -1,5 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
-import { EventService } from '../services/event.service';
+import { EventService, EventViewer } from '../services/event.service';
+import { normalizeRole } from '../middleware/auth';
+
+function viewerOf(req: Request): EventViewer | undefined {
+  const u: any = req.user;
+  if (!u?.id) return undefined;
+  return { id: u.id, isAdmin: normalizeRole(u.role) === 'administrator' };
+}
 import { ApiResponse, PaginatedResponse } from '../types';
 import { validateCreateEvent, validateUpdateEvent, validateSearchEvents, validateListEvents, validateEventsByTags, validateSetFeatured } from '../validators/event.validators';
 
@@ -13,7 +20,7 @@ export class EventController {
   async getEvent(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
-      const event = await this.eventService.getEvent(id);
+      const event = await this.eventService.getEvent(id, viewerOf(req));
 
       const response: ApiResponse = {
         success: true,
@@ -29,7 +36,7 @@ export class EventController {
   async getEventBySlug(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { slug } = req.params;
-      const event = await this.eventService.getEventBySlug(slug);
+      const event = await this.eventService.getEventBySlug(slug, viewerOf(req));
 
       const response: ApiResponse = {
         success: true,
@@ -140,6 +147,30 @@ export class EventController {
     }
   }
 
+  async submitEvent(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const creatorUid = (req.user as any)?.id;
+
+      if (!creatorUid) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const event = await this.eventService.submitEvent(id, creatorUid);
+
+      const response: ApiResponse = {
+        success: true,
+        data: event,
+        message: 'Event submitted for review',
+      };
+
+      res.status(200).json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async startEvent(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
@@ -231,7 +262,7 @@ export class EventController {
   async listEvents(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const validatedData = validateListEvents(req.query);
-      const { events, total } = await this.eventService.listEvents(validatedData);
+      const { events, total } = await this.eventService.listEvents(validatedData, viewerOf(req));
 
       const page = Math.floor((validatedData.offset || 0) / (validatedData.limit || 20)) + 1;
       const limit = validatedData.limit || 20;
@@ -322,7 +353,7 @@ export class EventController {
       const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
       const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
 
-      const { events, total } = await this.eventService.getEventsByCreator(creatorUid, { limit, offset });
+      const { events, total } = await this.eventService.getEventsByCreator(creatorUid, { limit, offset }, viewerOf(req));
 
       const page = Math.floor((offset || 0) / (limit || 20)) + 1;
       const limitValue = limit || 20;

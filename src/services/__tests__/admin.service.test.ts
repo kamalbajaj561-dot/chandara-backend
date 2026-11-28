@@ -35,8 +35,8 @@ describe('AdminService - Event Moderation', () => {
   });
 
   describe('approveEvent', () => {
-    it('should approve an event successfully', async () => {
-      const mockEvent = { id: 'event1', status: 'draft' };
+    it('should approve a pending event successfully', async () => {
+      const mockEvent = { id: 'event1', status: 'pending' };
       (eventRepository.findById as jest.Mock).mockResolvedValue(mockEvent);
       (eventRepository.update as jest.Mock).mockResolvedValue(mockEvent);
       (auditRepository.create as jest.Mock).mockResolvedValue({});
@@ -44,7 +44,7 @@ describe('AdminService - Event Moderation', () => {
       await adminService.approveEvent('event1', 'admin1', 'Admin');
 
       expect(eventRepository.findById).toHaveBeenCalledWith('event1');
-      expect(eventRepository.update).toHaveBeenCalledWith('event1', { status: 'scheduled' });
+      expect(eventRepository.update).toHaveBeenCalledWith('event1', { status: 'scheduled', rejectionReason: '' });
       expect(auditRepository.create).toHaveBeenCalled();
     });
 
@@ -54,18 +54,26 @@ describe('AdminService - Event Moderation', () => {
       await expect(adminService.approveEvent('event1', 'admin1', 'Admin'))
         .rejects.toThrow('Event not found');
     });
+
+    it('refuses to approve events that are not pending', async () => {
+      for (const status of ['draft', 'scheduled', 'live', 'ended', 'cancelled', 'rejected']) {
+        (eventRepository.findById as jest.Mock).mockResolvedValue({ id: 'event1', status });
+        await expect(adminService.approveEvent('event1', 'admin1', 'Admin')).rejects.toThrow('Only pending events can be approved');
+      }
+      expect(eventRepository.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('rejectEvent', () => {
-    it('should reject an event successfully', async () => {
-      const mockEvent = { id: 'event1', status: 'draft' };
+    it('should reject a pending event with the reason stored', async () => {
+      const mockEvent = { id: 'event1', status: 'pending' };
       (eventRepository.findById as jest.Mock).mockResolvedValue(mockEvent);
       (eventRepository.update as jest.Mock).mockResolvedValue(mockEvent);
       (auditRepository.create as jest.Mock).mockResolvedValue({});
 
       await adminService.rejectEvent('event1', 'admin1', 'Admin', 'Inappropriate content');
 
-      expect(eventRepository.update).toHaveBeenCalledWith('event1', { status: 'cancelled' });
+      expect(eventRepository.update).toHaveBeenCalledWith('event1', { status: 'rejected', rejectionReason: 'Inappropriate content' });
     });
   });
 
@@ -105,6 +113,13 @@ describe('AdminService - Event Moderation', () => {
       await adminService.cancelEvent('event1', 'admin1', 'Admin', 'Low attendance');
 
       expect(eventRepository.update).toHaveBeenCalledWith('event1', { status: 'cancelled' });
+    });
+
+    it('refuses to cancel events that already ended or were cancelled', async () => {
+      for (const status of ['ended', 'cancelled']) {
+        (eventRepository.findById as jest.Mock).mockResolvedValue({ id: 'event1', status });
+        await expect(adminService.cancelEvent('event1', 'admin1', 'Admin', 'x')).rejects.toThrow('already');
+      }
     });
   });
 

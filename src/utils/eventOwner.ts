@@ -8,5 +8,6 @@ export function getEventOwnerId(event: any): string | undefined {
 
 /** Statuses (backend + client vocabularies) in which an event is not visible/bookable by the public. */
 export const NON_PUBLIC_EVENT_STATUSES = ['draft', 'pending', 'rejected', 'cancelled'];
+// NOTE: legacy `approved` is an alias of `scheduled` (see utils/eventLifecycle.ts) and is public.
 /** Statuses in which tickets can no longer be bought. */
 export const NON_BOOKABLE_EVENT_STATUSES = [...NON_PUBLIC_EVENT_STATUSES, 'ended'];

@@ -1,3 +1,7 @@
+import { normalizeEventStatus, storedValuesFor, PUBLIC_EVENT_STATUSES } from '../utils/eventLifecycle';
+
+/** Stored status values that are visible to the public (includes the legacy `approved` alias). */
+export const PUBLIC_STORED_STATUSES: string[] = PUBLIC_EVENT_STATUSES.flatMap((st) => storedValuesFor(st));
 import { getFirestore } from '../services/firebase';
 import { Event } from '../types';
 import admin from 'firebase-admin';
@@ -85,11 +89,18 @@ export class EventRepository {
     creatorUid?: string;
     language?: string;
     country?: string;
+    /** Restrict to publicly visible statuses (used for anonymous / non-owner callers). */
+    publicOnly?: boolean;
   }): Promise<{ events: Event[]; total: number }> {
     let query: admin.firestore.Query = this.db.collection(this.collection);
 
+    if (options.publicOnly && !options.status) {
+      query = query.where('status', 'in', PUBLIC_STORED_STATUSES);
+    }
     if (options.status) {
-      query = query.where('status', '==', options.status);
+      const normalized = normalizeEventStatus(options.status);
+      const stored = storedValuesFor(normalized);
+      query = stored.length > 1 ? query.where('status', 'in', stored) : query.where('status', '==', stored[0]);
     }
     if (options.category) {
       query = query.where('category', '==', options.category);
@@ -112,8 +123,8 @@ export class EventRepository {
     const limit = options.limit || 20;
     const offset = options.offset || 0;
 
-    const countSnapshot = await query.get();
-    const total = countSnapshot.size;
+    const countSnapshot = await query.count().get();
+    const total = countSnapshot.data().count;
 
     const snapshot = await query.limit(limit).offset(offset).get();
 
@@ -189,7 +200,7 @@ export class EventRepository {
     const snapshot = await this.db
       .collection(this.collection)
       .where('featured', '==', true)
-      .where('status', 'in', ['scheduled', 'live'])
+      .where('status', 'in', ['scheduled', 'approved', 'live'])
       .orderBy('createdAt', 'desc')
       .limit(limit)
       .get();
@@ -212,37 +223,42 @@ export class EventRepository {
 
   async getUpcomingEvents(options: { limit?: number }): Promise<Event[]> {
     const limit = options.limit || 20;
-    const now = new Date();
+    const now = Date.now();
 
+    // Ordered by planned start. Legacy events may lack scheduledAt, so the "in the future" check is done
+    // on the mapped planned start (scheduledAt, else eventDate/eventTime) rather than in the query.
     const snapshot = await this.db
       .collection(this.collection)
-      .where('status', '==', 'scheduled')
-      .where('scheduledAt', '>', now)
-      .orderBy('scheduledAt', 'asc')
-      .limit(limit)
+      .where('status', 'in', ['scheduled', 'approved'])
+      .orderBy('createdAt', 'desc')
+      .limit(Math.min(limit * 5, 500))
       .get();
 
-    return snapshot.docs.map((doc) => this.mapDocToEvent(doc));
+    return snapshot.docs
+      .map((doc) => this.mapDocToEvent(doc))
+      .map((e) => ({ e, start: plannedStartMs(e) }))
+      .filter(({ start }) => start === undefined || start > now)
+      .sort((x, y) => (x.start ?? Infinity) - (y.start ?? Infinity))
+      .slice(0, limit)
+      .map(({ e }) => e);
   }
 
-  async getEventsByCreator(creatorUid: string, options: { limit?: number; offset?: number }): Promise<{ events: Event[]; total: number }> {
+  async getEventsByCreator(
+    creatorUid: string,
+    options: { limit?: number; offset?: number; publicOnly?: boolean }
+  ): Promise<{ events: Event[]; total: number }> {
     const limit = options.limit || 20;
     const offset = options.offset || 0;
 
-    const countSnapshot = await this.db
-      .collection(this.collection)
-      .where('creatorUid', '==', creatorUid)
-      .get();
+    let base: admin.firestore.Query = this.db.collection(this.collection).where('creatorUid', '==', creatorUid);
+    if (options.publicOnly) {
+      base = base.where('status', 'in', PUBLIC_STORED_STATUSES);
+    }
 
-    const total = countSnapshot.size;
+    const countSnapshot = await base.count().get();
+    const total = countSnapshot.data().count;
 
-    const snapshot = await this.db
-      .collection(this.collection)
-      .where('creatorUid', '==', creatorUid)
-      .orderBy('createdAt', 'desc')
-      .limit(limit)
-      .offset(offset)
-      .get();
+    const snapshot = await base.orderBy('createdAt', 'desc').limit(limit).offset(offset).get();
 
     const events = snapshot.docs.map((doc) => this.mapDocToEvent(doc));
     return { events, total };
@@ -297,9 +313,7 @@ export class EventRepository {
       updatedAt: new Date(),
     };
 
-    if (status === 'scheduled') {
-      updateData.scheduledAt = new Date();
-    } else if (status === 'live') {
+    if (status === 'live') {
       updateData.startedAt = new Date();
     } else if (status === 'ended') {
       updateData.endedAt = new Date();
@@ -341,7 +355,7 @@ export class EventRepository {
       country: data.country || '',
       city: data.city || '',
       venue: data.venue,
-      creatorUid: data.creatorUid || '',
+      creatorUid: data.creatorUid || data.ownerId || '',
       creatorName: data.creatorName || '',
       ticketPrice: data.ticketPrice || 0,
       currency: data.currency || 'USD',
@@ -351,7 +365,8 @@ export class EventRepository {
       eventTime: data.eventTime || '',
       timezone: data.timezone,
       duration: data.duration,
-      status: data.status || 'draft',
+      status: normalizeEventStatus(data.status),
+      rejectionReason: data.rejectionReason || undefined,
       thumbnail: data.thumbnail,
       banner: data.banner,
       capacity: data.capacity || 0,
@@ -368,3 +383,14 @@ export class EventRepository {
 }
 
 export const eventRepository = new EventRepository();
+
+/** Planned start (ms) of an event, from scheduledAt or eventDate+eventTime; undefined when unknown. */
+export function plannedStartMs(e: Pick<Event, 'scheduledAt' | 'eventDate' | 'eventTime'>): number | undefined {
+  if (e.scheduledAt) return e.scheduledAt.getTime();
+  if (!e.eventDate) return undefined;
+  const d = new Date(e.eventDate);
+  if (isNaN(d.getTime())) return undefined;
+  const m = /^(\d{1,2}):(\d{2})$/.exec(e.eventTime || '');
+  if (m) d.setUTCHours(parseInt(m[1], 10), parseInt(m[2], 10), 0, 0);
+  return d.getTime();
+}

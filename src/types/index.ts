@@ -80,7 +80,8 @@ export interface Event {
   eventTime: string;
   timezone?: string;
   duration?: number;
-  status: 'draft' | 'scheduled' | 'live' | 'ended' | 'cancelled';
+  status: 'draft' | 'pending' | 'scheduled' | 'live' | 'ended' | 'rejected' | 'cancelled';
+  rejectionReason?: string;
   thumbnail?: string;
   banner?: string;
   capacity: number;
